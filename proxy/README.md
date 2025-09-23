@@ -1,104 +1,104 @@
-# **Traefik & Authelia Proxy-Stack für das Home-Lab**
+# **Traefik & Authelia Proxy Stack for the Homelab**
 
-Dieses Verzeichnis enthält die Konfiguration für den zentralen Proxy- und Sicherheits-Stack unseres Home-Labs. Der Stack besteht aus zwei eng miteinander gekoppelten Diensten, die über eine einzige compose.yml-Datei verwaltet werden, um eine robuste und zuverlässige Startreihenfolge zu gewährleisten.
+This directory contains the configuration for the central proxy and security stack of our homelab. The stack consists of two tightly coupled services managed via a single compose.yml file to ensure a robust and reliable startup sequence.
 
-## **1\. Projektziel & Architektur**
+## **1\. Project Goal & Architecture**
 
-Das Ziel dieses Stacks ist es, eine zentrale, sichere und automatisierte Eingangspforte für alle Web-Dienste im Home-Lab bereitzustellen.
+The goal of this stack is to provide a central, secure, and automated entry point for all web services in the homelab.
 
-**Kernkomponenten:**
+**Core Components:**
 
-* **Traefik:** Fungiert als moderner Reverse Proxy. Er empfängt den gesamten Web-Traffic, leitet ihn an die entsprechenden internen Dienste weiter und kümmert sich um die automatische Anforderung und Erneuerung von SSL/TLS-Zertifikaten.  
-* **Authelia:** Dient als Single Sign-On (SSO) und 2-Faktor-Authentifizierungsportal. Bevor ein Benutzer auf einen geschützten Dienst zugreifen kann, wird er von Traefik an Authelia zur Anmeldung weitergeleitet.
+* **Traefik:** Functions as a modern reverse proxy. It receives all web traffic, forwards it to the appropriate internal services, and handles the automatic request and renewal of SSL/TLS certificates.  
+* **Authelia:** Serves as a Single Sign-On (SSO) and 2-Factor Authentication portal. Before a user can access a protected service, Traefik forwards them to Authelia for login.
 
-**Architektonisches Prinzip:**
+**Architectural Principle:**
 
-Die Dienste sind in einer einzigen compose.yml-Datei definiert, um die depends\_on und healthcheck-Funktionen von Docker Compose nutzen zu können. Dies löst ein klassisches Problem bei verteilten Setups: Traefik wird **gezwungen**, zu warten, bis Authelia nicht nur gestartet, sondern vollständig betriebsbereit (healthy) ist. Das verhindert Fehler, bei denen Traefik eine nicht existierende authelia-Middleware sucht, weil Authelia noch nicht bereit war.
+The services are defined in a single compose.yml file to leverage Docker Compose's depends\_on and healthcheck features. This solves a classic problem in distributed setups: Traefik is **forced** to wait until Authelia is not just started, but fully operational (healthy). This prevents errors where Traefik searches for a non-existent authelia middleware because Authelia was not yet ready.
 
-## **2\. Verzeichnisstruktur**
+## **2\. Directory Structure**
 
 proxy/  
 ├── authelia/  
 │   └── config/  
-│       ├── configuration.yml   \# Hauptkonfiguration für Authelia  
-│       ├── users.yaml          \# Benutzer- und Gruppendatenbank  
-│       └── db.sqlite3          \# Interne Datenbank von Authelia (wird automatisch erstellt)  
+│       ├── configuration.yml   \# Main configuration for Authelia  
+│       ├── users.yaml          \# User and group database  
+│       └── db.sqlite3          \# Authelia's internal database (created automatically)  
 ├── traefik/  
 │   ├── data/  
-│   │   └── acme.json           \# Speicher für Let's Encrypt SSL-Zertifikate  
-│   └── traefik.yml             \# Statische Konfiguration für Traefik  
-└── compose.yml                 \# Docker Compose Datei für den gesamten Stack
+│   │   └── acme.json           \# Storage for Let's Encrypt SSL certificates  
+│   └── traefik.yml             \# Static configuration for Traefik  
+└── compose.yml                 \# Docker Compose file for the entire stack
 
-## **3\. Konfiguration im Detail**
+## **3\. Configuration in Detail**
 
 ### **compose.yml**
 
-Dies ist die Steuerungszentrale des Stacks.
+This is the control center of the stack.
 
 * **services.authelia**:  
-  * **volumes**: Bindet das config-Verzeichnis in den Container, um eine persistente Konfiguration zu gewährleisten.  
-  * **env\_file**: Lädt globale Geheimnisse (wie den Session Secret) aus der zentralen .env-Datei im Hauptverzeichnis.  
-  * **labels**: Hier wird Authelia selbst als Dienst für Traefik deklariert. Außerdem wird hier die authelia-Middleware zentral für alle anderen Dienste definiert.  
-  * **healthcheck**: Der entscheidende Block. Er prüft alle 10 Sekunden mit wget, ob die Authelia-API unter http://localhost:9091/api/health antwortet. wget wird anstelle von curl verwendet, da es in minimalistischen Docker-Images wahrscheinlicher vorhanden ist.  
+  * **volumes**: Binds the config directory into the container to ensure persistent configuration.  
+  * **env\_file**: Loads global secrets (like the Session Secret) from the central .env file in the main directory.  
+  * **labels**: Declares Authelia itself as a service for Traefik. Additionally, this is where the authelia middleware is centrally defined for all other services.  
+  * **healthcheck**: The crucial block. It checks every 10 seconds with wget to see if the Authelia API responds at http://localhost:9091/api/health. wget is used instead of curl as it is more likely to be present in minimalist Docker images.  
 * **services.traefik**:  
-  * **depends\_on.authelia.condition: service\_healthy**: Dies ist die wichtigste Zeile für die Stabilität. Sie weist Docker an, den Traefik-Container erst dann zu starten, wenn der healthcheck von Authelia erfolgreich ist.  
-  * **environment.CF\_DNS\_API\_TOKEN**: Hier wird der API-Token für Cloudflare sicher als Umgebungsvariable übergeben, damit Traefik die DNS-Challenge für Let's Encrypt durchführen kann.  
+  * **depends\_on.authelia.condition: service\_healthy**: This is the most important line for stability. It instructs Docker to start the Traefik container only after Authelia's healthcheck is successful.  
+  * **environment.CF\_DNS\_API\_TOKEN**: The API token for Cloudflare is securely passed as an environment variable, allowing Traefik to perform the DNS challenge for Let's Encrypt.  
   * **volumes**:  
-    * ./traefik/traefik.yml: Bindet die statische Konfiguration in den Container.  
-    * /var/run/docker.sock: Gibt Traefik die Möglichkeit, andere Docker-Container zu "entdecken" und ihre Labels auszulesen.  
-    * ./traefik/data: Persistenter Speicher für die acme.json-Datei.
+    * ./traefik/traefik.yml: Binds the static configuration into the container.  
+    * /var/run/docker.sock: Allows Traefik to "discover" other Docker containers and read their labels.  
+    * ./traefik/data: Persistent storage for the acme.json file.
 
 ### **traefik.yml**
 
-Hier wird das Grundverhalten von Traefik definiert.
+This file defines the basic behavior of Traefik.
 
-* **entryPoints**: Definiert die "Türen", an denen Traefik lauscht (http auf Port 80 und websecure auf Port 443).  
-* **providers.docker**: Aktiviert die Docker-Integration. exposedByDefault: false ist eine wichtige Sicherheitseinstellung, die sicherstellt, dass nur Container mit dem Label "traefik.enable=true" veröffentlicht werden.  
-* **certificatesResolvers.letsencrypt.acme.dnsChallenge**: Dies ist die Konfiguration für die sichere Zertifikatsanforderung. Anstatt Ports zu öffnen (httpChallenge), weist diese Methode Traefik an, sich über die Cloudflare-API zu authentifizieren, um zu beweisen, dass es die Kontrolle über die Domain hat.
+* **entryPoints**: Defines the "doors" where Traefik listens (http on port 80 and websecure on port 443).  
+* **providers.docker**: Activates Docker integration. exposedByDefault: false is a critical security setting that ensures only containers with the label "traefik.enable=true" are published.  
+* **certificatesResolvers.letsencrypt.acme.dnsChallenge**: This is the configuration for secure certificate acquisition. Instead of opening ports (httpChallenge), this method instructs Traefik to authenticate via the Cloudflare API to prove it controls the domain.
 
 ### **authelia/config/configuration.yml**
 
-Die Steuerungszentrale für die Authentifizierung.
+The control center for authentication.
 
-* **server.address**: Definiert, auf welcher Adresse und welchem Port Authelia im Container lauscht. Die 0.0.0.0-Syntax ist wichtig, damit es von anderen Containern erreicht werden kann.  
-* **session.cookies**: Dies ist die moderne und korrekte Art, die Sitzungsdomain zu definieren. Die widersprüchliche, alte domain-Option wurde entfernt, um Startfehler zu vermeiden.  
-* **access\_control.rules**: Das Herzstück der Berechtigungslogik.  
-  * Die erste Regel (policy: bypass) ist entscheidend. Sie stellt sicher, dass die Login-Seite (auth.helmus.me) selbst nicht durch Authelia geschützt ist.  
-  * Die zweite Regel (policy: one\_factor) sichert alle anderen Subdomains (\*.helmus.me) und erlaubt den Zugriff nur für Benutzer, die Mitglied der Gruppe admins sind.  
-* **authentication\_backend.file**: Verweist auf die users.yaml-Datei als Quelle für Benutzerinformationen.
+* **server.address**: Defines the address and port on which Authelia listens inside the container. The 0.0.0.0 syntax is important so it can be reached by other containers.  
+* **session.cookies**: This is the modern and correct way to define the session domain. The conflicting, old domain option has been removed to prevent startup errors.  
+* **access\_control.rules**: The heart of the permission logic.  
+  * The first rule (policy: bypass) is critical. It ensures that the login page itself (auth.helmus.me) is not protected by Authelia.  
+  * The second rule (policy: one\_factor) secures all other subdomains (\*.helmus.me) and grants access only to users who are members of the admins group.  
+* **authentication\_backend.file**: Points to the users.yaml file as the source for user information.
 
-## **4\. Nutzung**
+## **4\. Usage**
 
-**Voraussetzungen:**
+**Prerequisites:**
 
-1. Eine korrekt ausgefüllte .env-Datei im Hauptverzeichnis (/docker/.env), die die CLOUDFLARE\_DNS\_API\_TOKEN- und die AUTHELIA\_\*-Variablen enthält.  
-2. Das externe Docker-Netzwerk proxy-netzwerk muss existieren (docker network create proxy-netzwerk).
+1. A correctly filled-out .env file in the main directory (/docker/.env) containing the CLOUDFLARE\_DNS\_API\_TOKEN and AUTHELIA\_\* variables.  
+2. The external Docker network proxy-netzwerk must exist (docker network create proxy-netzwerk).
 
-**Starten des Stacks:**
+**Starting the Stack:**
 
-\# Navigieren Sie in das /docker/proxy Verzeichnis  
+\# Navigate to the /docker/proxy directory  
 cd /docker/proxy
 
-\# Starten Sie den Stack  
+\# Start the stack  
 docker compose up \-d
 
-**Überprüfen des Status:**
+**Checking the Status:**
 
 docker compose ps
 
-Beide Container, authelia und traefik, sollten nach kurzer Zeit den Status (healthy) oder Up anzeigen.
+Both containers, authelia and traefik, should show a status of (healthy) or Up after a short time.
 
-## **5\. Troubleshooting \- Gelernte Lektionen**
+## **5\. Troubleshooting \- Lessons Learned**
 
-Dieser Abschnitt fasst die häufigsten Fehler zusammen, die während der Einrichtung aufgetreten sind, und wie sie gelöst wurden.
+This section summarizes the most common errors encountered during setup and how they were resolved.
 
-| Fehler / Symptom | Ursache | Lösung |
+| Error / Symptom | Cause | Solution |
 | :---- | :---- | :---- |
-| **502 Bad Gateway** auf Diensten | **SELinux (Fedora/RHEL)** blockiert die Netzwerkverbindung zwischen den Containern. | SELinux-Richtlinien für Container installieren (sudo dnf install container-selinux) und die Regel setzen: sudo setsebool \-P container\_network\_connect on. Im Extremfall war ein System-Relabel (sudo touch /.autorelabel && sudo reboot) oder sogar eine Neuinstallation der Richtlinien (sudo dnf reinstall selinux-policy-targeted) notwendig. |
-| middleware "authelia@docker" does not exist | Traefik ist gestartet, bevor der Authelia-Container seine Middleware registrieren konnte. | Die Zusammenlegung in einen Stack mit depends\_on und healthcheck hat dieses Problem dauerhaft gelöst. |
-| Authelia-Container ist unhealthy | Der healthcheck-Befehl im Container ist nicht vorhanden (curl) oder die Authelia-Konfiguration (configuration.yml) ist fehlerhaft. | Den Healthcheck-Befehl auf wget ändern. Die Authelia-Logs (docker logs authelia) auf fatale Konfigurationsfehler prüfen (z.B. widersprüchliche session.domain- und session.cookies-Optionen). |
-| Traefik-Logs: permissions ... for /data/acme.json are too open | Die Zertifikatsdatei ist aus Sicherheitsgründen für andere Benutzer lesbar. Traefik verweigert den Start. | Die korrekten, restriktiven Berechtigungen setzen: chmod 600 /docker/proxy/traefik/data/acme.json. |
-| Traefik-Logs: Cannot issue for "\*.homelab.local" | Let's Encrypt kann und darf keine Zertifikate für nicht-öffentliche Domains wie .local ausstellen. | Die Traefik-Router-Regeln (rule=...) so anpassen, dass sie **nur** die öffentliche Domain (\*.helmus.me) verwenden. Der lokale Zugriff funktioniert weiterhin über Split-Brain DNS (Pi-hole). |
-| Authelia: "Unendliches Laden" nach dem Login oder "403 Forbidden" | Die Zugriffsregeln in configuration.yml (subject: "group:admins") stimmen nicht mit der Gruppenzugehörigkeit des Benutzers in users.yaml überein. | Den Gruppennamen in der users.yaml-Datei exakt an die Regel anpassen (z.B. admin vs. admins). |
-| 404 Page Not Found bei einem Dienst | Der Traefik-Router für den Dienst findet den Zieldienst nicht. | Überprüfen, ob das Label traefik.http.routers.\<router-name\>.service=\<service-name\> in der compose.yml des Zieldienstes korrekt gesetzt ist. |
+| **502 Bad Gateway** on services | **SELinux (Fedora/RHEL)** blocks the network connection between containers. | Install SELinux policies for containers (sudo dnf install container-selinux) and set the rule: sudo setsebool \-P container\_network\_connect on. In extreme cases, a system relabel (sudo touch /.autorelabel && sudo reboot) or even reinstalling the policies (sudo dnf reinstall selinux-policy-targeted) was necessary. |
+| middleware "authelia@docker" does not exist | Traefik started before the Authelia container could register its middleware. | Consolidating into a single stack with depends\_on and healthcheck has permanently solved this problem. |
+| Authelia container is unhealthy | The healthcheck command is not present in the container (curl) or the Authelia configuration (configuration.yml) is faulty. | Change the healthcheck command to wget. Check the Authelia logs (docker logs authelia) for fatal configuration errors (e.g., conflicting session.domain and session.cookies options). |
+| Traefik Logs: permissions ... for /data/acme.json are too open | The certificate file is readable by other users for security reasons. Traefik refuses to start. | Set the correct, restrictive permissions: chmod 600 /docker/proxy/traefik/data/acme.json. |
+| Traefik Logs: Cannot issue for "\*.homelab.local" | Let's Encrypt cannot and will not issue certificates for non-public domains like .local. | Adjust the Traefik router rules (rule=...) to **only** use the public domain (\*.helmus.me). Local access continues to work via Split-Brain DNS (Pi-hole). |
+| Authelia: "Infinite loading" after login or "403 Forbidden" | The access control rules in configuration.yml (e.g., subject: "group:admins") do not match the user's group membership in users.yaml. | Ensure the group name in the users.yaml file exactly matches the rule (e.g., admin vs. admins). |
+| 404 Page Not Found for a service | The Traefik router for the service cannot find the target service. | Verify that the label traefik.http.routers.\<router-name\>.service=\<service-name\> is set correctly in the target service's compose.yml. |
 
