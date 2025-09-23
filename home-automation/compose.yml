@@ -1,0 +1,116 @@
+# /docker/home-automation/compose.yml
+# Diese zentrale Datei steuert den gesamten Heimautomatisierungs-Stack.
+
+services:
+  # Mosquitto ist der MQTT-Broker und eine Kernabhängigkeit für Zigbee2MQTT.
+  mosquitto:
+    image: "arm64v8/eclipse-mosquitto:2"
+    container_name: mosquitto
+    restart: unless-stopped
+    volumes:
+      - ./mosquitto/config:/mosquitto/config:Z
+      - ./mosquitto/data:/mosquitto/data:Z
+      - ./mosquitto/log:/mosquitto/log:Z
+    networks:
+      - ha-intern
+    security_opt:
+      - label:type:container_t
+
+  # Zigbee2MQTT stellt die Verbindung zu Ihren Zigbee-Geräten her und benötigt Mosquitto.
+  zigbee2mqtt:
+    image: "ghcr.io/koenkk/zigbee2mqtt:latest"
+    container_name: zigbee2mqtt
+    restart: unless-stopped
+    #privileged: true
+    environment:
+      - TZ=${TZ}
+    #ports:
+      #- "8088:8080"
+    volumes:
+      # KORREKTUR: Der Pfad wurde an die Verzeichnisstruktur angepasst (z2m-data liegt in zigbee2mqtt).
+      - ./zigbee2mqtt/z2m-data:/app/data:Z
+      - /run/udev:/run/udev:ro
+    devices:
+      - "${ZIGBEE_DEVICE_PATH}:/dev/ttyUSB0"
+    networks:
+      - ha-intern
+      - proxy-netzwerk
+    depends_on:
+      - mosquitto
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.zigbee2mqtt.rule=Host(`${SUBDOMAIN_ZIGBEE2MQTT}.${DOMAIN_PUBLIC}`)"
+      - "traefik.http.routers.zigbee2mqtt.entrypoints=websecure"
+      - "traefik.http.routers.zigbee2mqtt.tls=true"
+      - "traefik.http.routers.zigbee2mqtt.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.zigbee2mqtt.middlewares=authelia@docker"
+      - "traefik.http.routers.zigbee2mqtt.service=z2m-service"
+      - "traefik.http.services.z2m-service.loadbalancer.server.port=8080"
+
+  # InfluxDB dient als Datenbank für Langzeit-Statistiken von Home Assistant.
+  influxdb:
+    image: "influxdb:2.7"
+    container_name: influxdb
+    restart: unless-stopped
+    ports:
+      - "8086:8086"
+    environment:
+      - TZ=${TZ}
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=${INFLUXDB_ADMIN_USER}
+      - DOCKER_INFLUXDB_INIT_PASSWORD=${INFLUXDB_ADMIN_PASSWORD}
+      - DOCKER_INFLUXDB_INIT_ORG=${INFLUXDB_ORG}
+      - DOCKER_INFLUXDB_INIT_BUCKET=${INFLUXDB_BUCKET}
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${INFLUXDB_ADMIN_TOKEN}
+      - DOCKER_INFLUXDB_INIT_RETENTION=${INFLUXDB_RETENTION_DURATION}
+    volumes:
+      - ./homeassistant/influxdb/influxdb2:/var/lib/influxdb2:Z
+    networks:
+      - ha-intern
+
+  # Home Assistant ist die zentrale Steuerungssoftware.
+  homeassistant:
+    image: "ghcr.io/home-assistant/home-assistant:stable"
+    container_name: homeassistant
+    restart: unless-stopped
+    command: ["python", "-m", "homeassistant", "--config", "/config"]
+    ports:
+      - "8123:8123"
+    environment:
+      - TZ=${TZ}
+    volumes:
+      - ./homeassistant/config:/config:Z
+      - /etc/localtime:/etc/localtime:ro
+    networks:
+      - ha-intern
+      - proxy-netzwerk
+    depends_on:
+      - influxdb
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.homeassistant.rule=Host(`${SUBDOMAIN_HOMEASSISTANT}.${DOMAIN_PUBLIC}`)"
+      - "traefik.http.routers.homeassistant.entrypoints=websecure"
+      - "traefik.http.routers.homeassistant.tls=true"
+      - "traefik.http.routers.homeassistant.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.homeassistant.middlewares=authelia@docker"
+      - "traefik.http.services.homeassistant.loadbalancer.server.port=8123"
+
+# Top-Level-Definition der Docker-Volumes, die von den Diensten verwendet werden.
+#volumes:
+#  mosquitto-data:
+#  mosquitto-log:
+
+# Top-Level-Definition der Netzwerke.
+networks:
+  # Internes Netzwerk für die Kommunikation zwischen den Stack-Diensten (z.B. HA -> InfluxDB)
+  ha-intern:
+    driver: bridge
+    name: ha-intern
+
+  # Externes Netzwerk für die Verbindung zum Traefik Reverse Proxy
+  # Dieses Netzwerk wurde bereits extern erstellt und wird hier nur referenziert.
+  proxy-netzwerk:
+    external: true
+

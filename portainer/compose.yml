@@ -1,0 +1,41 @@
+# /docker/portainer/compose.yml
+# Diese Konfiguration integriert Portainer nahtlos und robust in den Proxy-Stack.
+
+services:
+  portainer:
+    image: portainer/portainer-ce:2.34.0-linux-arm64
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    # KORREKTUR: env_file hinzugefügt für Konsistenz und Zuverlässigkeit
+    env_file:
+      - ../.env
+    environment:
+      # PUID/PGID werden jetzt aus der .env-Datei geladen
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./data:/data:Z
+    networks:
+      - proxy-netzwerk
+    labels:
+      - "traefik.enable=true"
+      
+      # --- Router-Definition ---
+      - "traefik.http.routers.portainer.rule=Host(`${SUBDOMAIN_PORTAINER}.${DOMAIN_PUBLIC}`)"
+      - "traefik.http.routers.portainer.entrypoints=websecure"
+      - "traefik.http.routers.portainer.tls=true"
+      - "traefik.http.routers.portainer.tls.certresolver=letsencrypt"
+      
+      # --- Middleware-Zuweisung ---
+      - "traefik.http.middlewares.iframe-headers.headers.contentSecurityPolicy=frame-ancestors 'self' https://home.${DOMAIN_PUBLIC}"
+      - "traefik.http.routers.portainer.middlewares=authelia@docker,iframe-headers@docker"
+      
+      - "traefik.http.routers.portainer.service=portainer-service"
+      - "traefik.http.services.portainer-service.loadbalancer.server.port=9000"
+
+networks:
+  proxy-netzwerk:
+    external: true

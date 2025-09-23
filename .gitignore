@@ -1,0 +1,68 @@
+# --- General / Project-Wide ---
+# Ignore the most important file: the one with all the secrets.
+.env
+
+# Ignore OS-specific files
+.DS_Store
+Thumbs.db
+
+# Ignore IDE-specific files
+.vscode/
+
+# Ignore temporary/backup files created by editors
+*.bak
+*.old
+*.swp
+.git_backup/
+
+# --- Proxy Stack ---
+# Ignore Traefik's generated certificate file
+proxy/traefik/data/acme.json
+proxy/traefik/certs/
+proxy/traefik/dynamic_conf/
+
+# Ignore Authelia's database and user files.
+# We want to keep the main configuration.yml.
+proxy/authelia/config/*
+proxy/authelia/secrets/
+!proxy/authelia/config/configuration.yml
+
+# Ignore Cloudflared's tunnel credentials
+proxy/cloudflared/config/*
+
+# --- Home Automation Stack ---
+# For Home Assistant, we ignore almost everything in the config folder,
+home-automation/homeassistant/config/
+
+# Ignore InfluxDB data
+home-automation/homeassistant/influxdb2/
+home-automation/homeassistant/influxdb/
+
+# Ignore Mosquitto data and logs
+home-automation/mosquitto/data/
+home-automation/mosquitto/log/
+home-automation/mosquitto/config/
+
+# For Zigbee2MQTT, ignore everything in the data folder except the configuration
+home-automation/zigbee2mqtt/z2m-data/*
+
+# --- n8n ---
+# Ignore n8n's database, crash logs, and user-uploaded files
+n8n/n8n-data/
+
+# --- Pi-hole ---
+# Ignore Pi-hole's gravity database and runtime configuration
+pihole/etc-pihole/
+pihole/etc-dnsmasq.d/
+
+# --- Portainer ---
+# Ignore Portainer's entire data directory
+portainer/data/
+
+# --- TeslaLogger ---
+# Ignore TeslaLogger's database
+teslalogger/mysql/
+
+# --- VSCode Server ---
+# Ignore VSCode Server's user settings, extensions, and history
+vscode-server/config/

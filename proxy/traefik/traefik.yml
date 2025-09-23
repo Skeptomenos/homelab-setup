@@ -1,0 +1,58 @@
+# /docker/proxy/traefik/traefik.yml
+
+# Globale Einstellungen
+global:
+  checkNewVersion: true
+  sendAnonymousUsage: false
+
+# Traefik Dashboard und API aktivieren
+api:
+  dashboard: true # Ermöglicht den Zugriff auf das Dashboard
+  insecure: false # Stellt sicher, dass das Dashboard nur über HTTPS erreichbar ist (Standard: true, aber wir wollen es sicherer)
+
+ping: {}
+
+# Definition der Einstiegspunkte (EntryPoints) für den ankommenden Traffic
+entryPoints:
+  # Der unverschlüsselte HTTP-Port
+  http:
+    address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+
+  # Der verschlüsselte HTTPS-Port
+  websecure:
+    address: ":443"
+
+# Definition der "Provider", die Traefik nach neuen Routen durchsucht
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock" # Mit dem Docker-Daemon kommunizieren
+    exposedByDefault: false # WICHTIG: Nur Container mit explizitem Label werden veröffentlicht
+    network: "proxy-netzwerk" # Das Standard-Netzwerk für die Verbindung zu den Diensten
+
+# Definition des "Certificate Resolver" für die automatische SSL-Zertifikatserstellung
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      # WICHTIG: Stellen Sie sicher, dass dies Ihre korrekte E-Mail ist.
+      email: "david@helmus.me"
+      storage: "/data/acme.json"
+      # Konfiguration für die sichere DNS-01 Challenge mit Cloudflare
+      dnsChallenge:
+        provider: "cloudflare"
+        # Eine kleine Verzögerung kann helfen, damit sich DNS-Änderungen verbreiten.
+        # Dieser Wert ist optional, aber oft hilfreich.
+        delayBeforeCheck: 0
+      
+      
+      #httpChallenge:
+      #  entryPoint: "http"
+
+#tls:
+#  certificates:
+#    - certFile: /certs/_wildcard.homelab.local.pem
+#      keyFile: /certs/_wildcard.homelab.local-key.pem

@@ -1,0 +1,95 @@
+services:
+  authelia:
+    image: authelia/authelia:4.39.10
+    container_name: authelia
+    restart: unless-stopped
+    volumes:
+      - ./authelia/config:/config:Z
+    env_file:
+      - ../.env
+    networks:
+      - proxy-netzwerk
+    environment:
+      - AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET=${AUTHELIA_JWT_SECRET}
+      - AUTHELIA_SESSION_SECRET=${AUTHELIA_SESSION_SECRET}
+      - AUTHELIA_STORAGE_ENCRYPTION_KEY=${AUTHELIA_STORAGE_ENCRYPTION_KEY}
+    labels:
+      - "traefik.enable=true"
+      # Die Regel verwendet nur noch die öffentliche Domain für Konsistenz
+      - "traefik.http.routers.authelia.rule=Host(`${SUBDOMAIN_AUTHELIA}.${DOMAIN_PUBLIC}`)"
+      - "traefik.http.routers.authelia.entrypoints=websecure"
+      - "traefik.http.routers.authelia.tls=true"
+      - "traefik.http.routers.authelia.tls.certresolver=letsencrypt"
+      - "traefik.http.services.authelia.loadbalancer.server.port=9091"
+      
+      # Hier wird die Middleware zentral definiert
+      - "traefik.http.middlewares.authelia.forwardauth.address=http://authelia:9091/api/authz/forward-auth"
+      - "traefik.http.middlewares.authelia.forwardauth.trustForwardHeader=true"
+      - "traefik.http.middlewares.authelia.forwardauth.authResponseHeaders=Remote-User,Remote-Groups,Remote-Name,Remote-Email"
+    # NEU: Der Healthcheck prüft, ob die Authelia-API bereit ist.
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9091/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # Traefik ist der Reverse Proxy.
+  # Er startet erst, wenn Authelia "healthy" ist.
+  traefik:
+    image: traefik:v3.5.2
+    container_name: traefik
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - proxy-netzwerk
+    # NEU: Traefik wartet auf einen gesunden Authelia-Container.
+    depends_on:
+      authelia:
+        condition: service_healthy
+    environment:
+      - CF_DNS_API_TOKEN=${CLOUDFLARE_DNS_API_TOKEN}
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - TZ=${TZ:-Europe/Berlin}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/data:/data:Z
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik-dashboard.rule=Host(`${SUBDOMAIN_TRAEFIK}.${DOMAIN_PUBLIC}`)"
+      - "traefik.http.routers.traefik-dashboard.service=api@internal"
+      - "traefik.http.routers.traefik-dashboard.entrypoints=websecure"
+      - "traefik.http.routers.traefik-dashboard.tls=true"
+      - "traefik.http.routers.traefik-dashboard.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.traefik-dashboard.middlewares=authelia@docker"
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    
+  cloudflared:
+    image: cloudflare/cloudflared:2025.8.1-arm64
+    container_name: cloudflared
+    restart: unless-stopped
+    security_opt:
+      - label:disable
+      - no-new-privileges:true 
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    networks:
+      - proxy-netzwerk
+    env_file:
+      - ../.env
+    depends_on:
+        traefik:
+          condition: service_healthy # Wait for Traefik to be healthy
+
+networks:
+  proxy-netzwerk:
+    external: true

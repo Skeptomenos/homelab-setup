@@ -1,0 +1,159 @@
+#
+# ++ DO NOT EDIT ++
+# anything in this section!
+# If you want to use other ports or storage locations:
+# Use the .env file!
+#
+services:
+  teslalogger:
+    image: bassmaster187/teslalogger:latest
+    container_name: teslalogger
+    restart: always
+    volumes:
+      - teslalogger-net8-tmp:/tmp/
+      - teslalogger-net8-sqlschema:/etc/teslalogger/sqlschema
+      - teslalogger-net8-grafanadashboards:/var/lib/grafana/dashboards/
+      - teslalogger-net8-grafanaplugins:/var/lib/grafana/plugins/
+      - ${APPDATA_PATH:-.}/backup:/etc/teslalogger/backup
+      - ${APPDATA_PATH:-.}/invoices:/etc/teslalogger/Debug/net8.0/tesla_invoices
+      - teslalogger-net8-data:/etc/teslalogger/data
+    depends_on:
+      - teslalogger-database
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - UMASK=${UMASK:-002}
+      - TZ=${TZ:-Europe/Berlin}
+    ports:
+      - ${TESLALOGGER_PORT:-5010}:5000
+    labels:
+      - com.centurylinklabs.watchtower.enable=${WATCHTOWER_ENABLE:-true}
+      - com.centurylinklabs.watchtower.scope=teslalogger-stack
+      
+      
+  teslalogger-database:
+    image: mariadb:10.4.7
+    container_name: teslalogger-db
+    restart: always
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - UMASK=${UMASK:-002}
+      - TZ=${TZ:-Europe/Berlin}
+      - MYSQL_USER=${TESLALOGGER_DB_USER}
+      - MYSQL_PASSWORD=${TESLALOGGER_DB_PASSWORD}
+      - MYSQL_DATABASE=${TESLALOGGER_DB_NAME}
+      - MYSQL_ROOT_PASSWORD=${TESLALOGGER_DB_ROOT_PASSWORD}
+    volumes:
+      - teslalogger-net8-sqlschema:/docker-entrypoint-initdb.d
+      - ${APPDATA_PATH:-.}/mysql:/var/lib/mysql
+    #ports:
+    #  - 3306:3306      # No need to expose the DB to the public, communication is stack-internal
+    #healthcheck:
+    #  test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+    #  start_period: 10s
+    #  interval: 10s
+    #  timeout: 5s
+    #  retries: 3
+    labels:
+      - com.centurylinklabs.watchtower.enable=${WATCHTOWER_ENABLE:-true}
+      - com.centurylinklabs.watchtower.scope=teslalogger-stack
+      
+      
+  teslalogger-grafana:
+    image: bassmaster187/teslalogger-grafana:latest
+    container_name: teslalogger-grafana
+    restart: always
+    volumes: 
+      - teslalogger-net8-grafanadashboards:/var/lib/grafana/dashboards/
+      - teslalogger-net8-grafanaplugins:/var/lib/grafana/plugins/
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${TESLALOGGER_GF_ADMIN_PASSWORD}
+      - TZ=${TZ:-Europe/Berlin}
+    ports:
+      - ${GRAFANA_PORT:-3000}:3000
+    depends_on:
+      - teslalogger-database
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - default
+      - proxy-netzwerk
+    labels:
+      - com.centurylinklabs.watchtower.enable=${WATCHTOWER_ENABLE:-true}
+      - com.centurylinklabs.watchtower.scope=teslalogger-stack
+      # --- Traefik Labels for Grafana ---
+      - "traefik.enable=true"
+      - "traefik.http.routers.teslalogger-grafana.rule=Host(`grafana.${DOMAIN_PUBLIC}`)"
+      #- "traefik.http.routers.teslalogger-grafana.rule=Host(`grafana.${DOMAIN_LOCAL}`) || Host(`grafana.${DOMAIN_PUBLIC}`)"
+      - "traefik.http.routers.teslalogger-grafana.tls=true"
+      - "traefik.http.routers.teslalogger-grafana.middlewares=authelia@docker"
+      - "traefik.http.services.teslalogger-grafana.loadbalancer.server.port=3000"
+      - "traefik.http.routers.teslalogger-grafana.tls.certresolver=letsencrypt"
+
+  teslalogger-webserver:
+    image: bassmaster187/teslalogger-webserver:latest
+    container_name: teslalogger-webserver
+    restart: always
+    volumes:
+      - teslalogger-net8-tmp:/tmp/
+      #- ./www:/var/www/html
+    depends_on:
+      - teslalogger
+      - teslalogger-grafana
+    ports:
+      - ${WEBSERVER_PORT:-8888}:80
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - UMASK=${UMASK:-002}
+      - TZ=${TZ:-Europe/Berlin}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - default
+      - proxy-netzwerk # Connect to Traefik's network
+    labels:
+      - com.centurylinklabs.watchtower.enable=${WATCHTOWER_ENABLE:-true}
+      - com.centurylinklabs.watchtower.scope=teslalogger-stack
+      - "traefik.enable=true"
+      - "traefik.http.routers.teslalogger-ui.rule=Host(`teslalogger.${DOMAIN_PUBLIC}`)"
+      #- "traefik.http.routers.teslalogger-ui.rule=Host(`teslalogger.${DOMAIN_LOCAL}`) || Host(`teslalogger.${DOMAIN_PUBLIC}`)"
+      - "traefik.http.routers.teslalogger-ui.tls=true"
+      - "traefik.http.routers.teslalogger-ui.middlewares=authelia@docker"
+      - "traefik.http.services.teslalogger-ui.loadbalancer.server.port=80"
+      - "traefik.http.routers.teslalogger-ui.tls.certresolver=letsencrypt"
+      
+      
+  # watchtower updates label "teslalogger-stack" only
+  teslalogger-watchtower:
+    image: containrrr/watchtower
+    container_name: teslalogger-watchtower
+    restart: always
+    volumes:
+        - /var/run/docker.sock:/var/run/docker.sock
+    command: --debug --http-api-update --scope teslalogger-stack
+    environment:
+      - WATCHTOWER_HTTP_API_TOKEN=${WATCHTOWER_TOKEN}
+      - WATCHTOWER_LABEL_ENABLE=true
+      - WATCHTOWER_SCOPE=teslalogger-stack
+      
+      
+volumes:
+    teslalogger-net8-tmp:
+    teslalogger-net8-data:
+    teslalogger-net8-sqlschema:
+    teslalogger-net8-grafanadashboards:
+    teslalogger-net8-grafanaplugins:
+
+# Define the networks used in this compose file
+networks:
+  proxy-netzwerk:
+    external: true

@@ -1,0 +1,38 @@
+services:
+  code-server:
+    image: linuxserver/code-server:latest
+    container_name: code-server
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - UMASK=${UMASK:-002}
+      - TZ=${TZ:-Europe/Berlin}
+      #- DOCKER_MODS=linuxserver/mods:code-server-webui # Optional für WebUI-Verbesserungen
+    volumes:
+      # Persistenter Speicher für VS Code Server Daten
+      # :Z (Großbuchstabe) ist entscheidend für die korrekten SELinux-Labels.
+      - ./config:/config:Z
+      - /docker/:/config/workspace:Z
+    networks:
+      - proxy-netzwerk
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.vscode-server.rule=Host(`${SUBDOMAIN_VSCODE}.${DOMAIN_PUBLIC}`)"
+      #- "traefik.http.routers.vscode-server.rule=Host(`${SUBDOMAIN_VSCODE}.${DOMAIN_LOCAL}`) || Host(`${SUBDOMAIN_VSCODE}.${DOMAIN_PUBLIC}`)"
+      - "traefik.http.routers.vscode-server.tls=true"
+      - "traefik.http.routers.vscode-server.entrypoints=websecure"
+
+      - "traefik.http.routers.vscode-server.middlewares=authelia@docker"
+
+      - "traefik.http.services.vscode-server.loadbalancer.server.port=8443"
+
+      # --- VORBEREITUNG FÜR LIVE-BETRIEB ---
+      # Für den Live-Betrieb müssen diese Labels angepasst und einkommentiert werden.
+      - "traefik.http.routers.vscode-server.tls.certresolver=letsencrypt"
+
+networks:
+  proxy-netzwerk:
+    external: true
