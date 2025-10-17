@@ -32,11 +32,15 @@ services:
       - TZ=${TZ}
       - WEBHOOK_URL=https://n8n.${DOMAIN_PUBLIC}/
       - N8N_PROXY_HOPS=1
-      - N8N_BASIC_AUTH_ACTIVE=false
+      # --- STABLE AUTH CONFIGURATION ---
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+      - N8N_JWT_SECRET=${N8N_JWT_SECRET}
+      # --- END STABLE AUTH ---
       - N8N_RUNNERS_ENABLED=true
       - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
-      - N8N_FORWARD_AUTH_HEADER=Remote-Email
-      - EXTERNAL_HOOK_FILES=/home/node/.n8n/hooks.js
       - DB_TYPE=postgresdb
       - DB_POSTGRESDB_HOST=postgres
       - DB_POSTGRESDB_PORT=5432
@@ -59,30 +63,19 @@ services:
       retries: 5
       start_period: 60s # Gibt dem Container 60s Zeit für die Migrationen
     labels:
-      # --- High-priority router for telemetry (bypasses Authelia) ---
       - "traefik.enable=true"
-      - "traefik.http.routers.n8n-telemetry.rule=Host(`n8n.${DOMAIN_PUBLIC}`) && PathPrefix(`/rest/telemetry`)"
-      - "traefik.http.routers.n8n-telemetry.entrypoints=websecure"
-      - "traefik.http.routers.n8n-telemetry.priority=100"
-      - "traefik.http.routers.n8n-telemetry.tls=true"
-      - "traefik.http.routers.n8n-telemetry.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.n8n-telemetry.service=n8n-service"
-      
-      # --- Low-priority router for the main app (uses Authelia) ---
       - "traefik.http.routers.n8n-main.rule=Host(`n8n.${DOMAIN_PUBLIC}`)"
       - "traefik.http.routers.n8n-main.entrypoints=websecure"
-      - "traefik.http.routers.n8n-main.priority=50"
       - "traefik.http.routers.n8n-main.tls=true"
       - "traefik.http.routers.n8n-main.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.n8n-main.service=n8n-service"
       
       # --- MIDDLEWARE CHAIN ---
-      # 1. Define the CSP middleware to allow embedding in Home Assistant
+      # Define the CSP middleware to allow embedding in Home Assistant
       - "traefik.http.middlewares.iframe-headers.headers.contentSecurityPolicy=frame-ancestors 'self' https://home.${DOMAIN_PUBLIC}"
-      # 2. Apply the Authelia middleware AND the new CSP middleware
-      - "traefik.http.routers.n8n-main.middlewares=authelia@docker,iframe-headers@docker"
+      - "traefik.http.routers.n8n-main.middlewares=iframe-headers@docker"
       
       # --- Service Definition (shared by both routers) ---
-      - "traefik.http.routers.n8n-main.service=n8n-service"
       - "traefik.http.services.n8n-service.loadbalancer.server.port=5678"
 
 networks:
