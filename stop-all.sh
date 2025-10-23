@@ -1,34 +1,107 @@
-#!/usr/bin/env zsh
+#!/bin/bash
 
-# Dieses Skript stoppt alle Docker Compose-Dienste im homelab-setup-Verzeichnis.
+# SRE Homelab - Master Stop Script
+# Dieses Skript stellt sicher, dass die globale .env-Datei (Single Source of Truth)
+# *immer* korrekt geladen wird, um Services sauber herunterzufahren.
+#
+# USAGE:
+#   ./stop-all.sh               (Stoppt ALLE Services in allen Unterverzeichnissen)
+#   ./stop-all.sh diun          (Stoppt NUR den Service im Verzeichnis ./diun)
+#   ./stop-all.sh diun n8n ...  (Stoppt alle angegebenen Services nacheinander)
 
-# Finde das Stammverzeichnis des Skripts, damit es von überall aus funktioniert.
-SCRIPT_DIR=$(dirname "$0")
-cd "$SCRIPT_DIR" || exit
+# --- Pruefungen ---
+# Stelle sicher, dass wir uns im Verzeichnis des Skripts befinden (z.B. /docker)
+cd "$(dirname "$0")"
+echo "Working directory: $(pwd)"
 
-# Definiere den Pfad zur globalen .env-Datei
-ENV_FILE_PATH="$(pwd)/.env"
+# Finde die globale .env-Datei (Single Source of Truth)
+ENV_FILE_PATH="./.env"
 
-# Überprüfe, ob die .env-Datei existiert. Beim Stoppen ist es nur eine Warnung.
 if [ ! -f "$ENV_FILE_PATH" ]; then
-    echo "⚠️ WARNUNG: Globale .env-Datei nicht unter $ENV_FILE_PATH gefunden."
-    echo "    Das Herunterfahren könnte fehlschlagen, wenn Variablen für Netzwerknamen etc. benötigt werden."
+    echo "-----------------------------------------------------"
+    echo "!! SRE CRITICAL ERROR !!"
+    echo "Globale .env-Datei nicht gefunden unter: $ENV_FILE_PATH"
+    echo "Kann Status der Services nicht verwalten."
+    echo "-----------------------------------------------------"
+    exit 1
 fi
 
-echo "🛑 Shutting down all Docker Compose services in homelab-setup..."
+echo "Global .env file found. Proceeding..."
+echo " "
 
-# --- KORREKTUR HIER ---
-# Finde alle compose.yml-Dateien in den direkten Unterverzeichnissen.
-# Der Zusatz (N) ist ein Zsh "glob qualifier", der verhindert, dass das Skript
-# abbricht, wenn eines der Suchmuster keine Dateien findet.
-for compose_file in */compose.yml(N) */*/compose.yml(N); do
-    # Extrahiere das Verzeichnis aus dem Pfad
-    dir=$(dirname "${compose_file}")
+# --- Argumenten-Handling ---
 
-    echo "\n--- Found compose file in '$dir'. Shutting down... ---"
-    # Führe docker compose down aus und übergebe explizit die .env-Datei
-    (cd "$dir" && docker compose --env-file "$ENV_FILE_PATH" down)
-    echo "--- Services in '$dir' stopped successfully. ---"
-done
+if [ $# -eq 0 ]; then
+    # --- FALL 1: KEINE ARGUMENTE ---
+    # Stoppe alle Services (bisheriges Verhalten)
+    
+    echo "Kein spezifischer Service angefordert. Stoppe ALLE Services..."
 
-echo "\n✅ All services have been shut down."
+    find . -mindepth 2 -name 'compose.yml' | while read -r composefile; do
+        DIR=$(dirname "$composefile")
+        
+        # Ignoriere Verzeichnisse, die mit '.' beginnen (z.B. .git, .vscode)
+        if [[ "$DIR" == *"/."* ]]; then
+            continue
+        fi
+        
+        echo "-----------------------------------------------------"
+        echo "Stopping services in: $DIR"
+        echo "-----------------------------------------------------"
+        (
+            # WICHTIG: Lade die .env-Datei aus dem Root-Verzeichnis
+            cd "$DIR" && docker compose --env-file ../.env down --remove-orphans
+        )
+        echo " "
+    done
+    
+    echo "Alle Services wurden heruntergefahren."
+
+else
+    # --- FALL 2: EIN ODER MEHR ARGUMENTE ---
+    # Stoppe nur die spezifisch angeforderten Services
+    
+    echo "Spezifische Services zum Stoppen angefordert: $@"
+    echo " "
+    
+    # Iteriere durch JEDES Argument, das dem Skript übergeben wurde
+    for SERVICE_NAME in "$@"; do
+    
+        SERVICE_DIR="./$SERVICE_NAME"
+        SERVICE_COMPOSE_FILE="$SERVICE_DIR/compose.yml"
+        
+        echo "--- Bearbeite Service: $SERVICE_NAME ---"
+
+        # --- Validierung (SRE-Prinzip: Verhindere Fehler) ---
+        if [ ! -d "$SERVICE_DIR" ]; then
+            echo "!! SRE VALIDATION ERROR !!"
+            echo "Verzeichnis nicht gefunden: $SERVICE_DIR"
+            echo "-> Service $SERVICE_NAME wird ÜBERSPRUNGEN."
+            echo "-----------------------------------------------------"
+            echo " "
+            continue # Mache mit dem nächsten Argument weiter
+        fi
+        
+        if [ ! -f "$SERVICE_COMPOSE_FILE" ]; then
+            echo "!! SRE VALIDATION ERROR !!"
+            echo "compose.yml nicht gefunden in $SERVICE_DIR"
+            echo "-> Service $SERVICE_NAME wird ÜBERSPRUNGEN."
+            echo "-----------------------------------------------------"
+            echo " "
+            continue # Mache mit dem nächsten Argument weiter
+        fi
+
+        # --- Ausfuehrung ---
+        echo "Stoppe Services in: $SERVICE_DIR"
+        (
+            # WICHTIG: Lade die .env-Datei aus dem Root-Verzeichnis
+            cd "$DIR" && docker compose --env-file ../.env down --remove-orphans
+        )
+        echo "-----------------------------------------------------"
+        echo " "
+    done
+    
+    echo "Alle angeforderten Services wurden heruntergefahren."
+fi
+
+exit 0
