@@ -21,7 +21,7 @@ services:
       retries: 5
 
   n8n:
-    image: docker.n8n.io/n8nio/n8n:1.113.0-arm64
+    image: docker.n8n.io/n8nio/n8n:1.115.3-arm64
     container_name: n8n
     restart: unless-stopped
     env_file:
@@ -29,6 +29,7 @@ services:
     environment:
       - PUID=${PUID}
       - PGID=${PGID}
+      - GENERIC_TIMEZONE="Europe/Berlin"
       - TZ=${TZ}
       - WEBHOOK_URL=https://n8n.${DOMAIN_PUBLIC}/
       - N8N_PROXY_HOPS=1

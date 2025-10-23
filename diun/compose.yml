@@ -1,0 +1,41 @@
+# Diese Datei implementiert Diun (Docker Image Update Notifier)
+# gemäß den "Core Architectural Concepts" unseres Homelabs.
+
+services:
+  diun:
+    # SRE Best Practice: Pinning der Version statt 'latest'
+    # verhindert, dass Diun selbst unkontrolliert aktualisiert wird.
+    image: crazymax/diun:4.28
+    container_name: diun
+    restart: unless-stopped
+    
+    # 1. KERNKONZEPT: Zentralisierte Konfiguration
+    # Lädt alle Konfigurationen (API-Keys, URLs, Zeitpläne)
+    # aus der globalen .env-Datei im Projekt-Root.
+    env_file:
+      - ../.env
+
+    # 2. KERNKONZEPT: Konsistente Berechtigungen
+    # Stellt sicher, dass der Container mit den Berechtigungen
+    # des Host-Benutzers (PUID/PGID 1000) läuft.
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      # Alle DIUN_... Variablen werden aus der .env_file geladen.
+
+    volumes:
+      # Benötigt, damit Diun die laufenden Container und ihre
+      # Image-Tags überwachen kann.
+      # :ro (read-only) ist eine zusätzliche Sicherheitsmaßnahme.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      
+      # 3. KERNKONZEPT: SELinux-konforme Bind-Mounts
+      # Persistenter Speicher für die Diun-Datenbank.
+      # Das :Z Flag ist auf Fedora-Systemen zwingend erforderlich,
+      # um "Permission Denied"-Fehler zu verhindern.
+      - ./data:/data:Z
+      
+    # NETZWERK:
+    # Diun benötigt in dieser Konfiguration kein eigenes Netzwerk
+    # oder Traefik-Routing, da es keinen Web-Service bereitstellt,
+    # sondern nur ausgehende Webhooks an n8n sendet.
