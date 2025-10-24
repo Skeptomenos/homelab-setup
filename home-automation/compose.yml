@@ -7,6 +7,8 @@ services:
     image: "arm64v8/eclipse-mosquitto:2"
     container_name: mosquitto
     restart: unless-stopped
+    labels:
+      - "diun.enable=true"
     volumes:
       - ./mosquitto/config:/mosquitto/config:Z
       - ./mosquitto/data:/mosquitto/data:Z
@@ -38,6 +40,7 @@ services:
     depends_on:
       - mosquitto
     labels:
+      - "diun.enable=true"
       - "traefik.enable=true"
       - "traefik.http.routers.zigbee2mqtt.rule=Host(`${SUBDOMAIN_ZIGBEE2MQTT}.${DOMAIN_PUBLIC}`)"
       - "traefik.http.routers.zigbee2mqtt.entrypoints=websecure"
@@ -54,6 +57,8 @@ services:
     restart: unless-stopped
     ports:
       - "8086:8086"
+    labels:
+      - "diun.enable=true"
     environment:
       - TZ=${TZ}
       - PUID=${PUID}
@@ -89,6 +94,7 @@ services:
     depends_on:
       - influxdb
     labels:
+      - "diun.enable=true"
       - "traefik.enable=true"
       - "traefik.http.routers.homeassistant.rule=Host(`${SUBDOMAIN_HOMEASSISTANT}.${DOMAIN_PUBLIC}`)"
       - "traefik.http.routers.homeassistant.entrypoints=websecure"

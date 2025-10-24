@@ -66,3 +66,8 @@ teslalogger/mysql/
 # --- VSCode Server ---
 # Ignore VSCode Server's user settings, extensions, and history
 vscode-server/config/
+
+
+# --- DIUN ---
+# Ignore DIUN's database
+diun/data/

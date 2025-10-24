@@ -1,41 +1,48 @@
-# Diese Datei implementiert Diun (Docker Image Update Notifier)
-# gemäß den "Core Architectural Concepts" unseres Homelabs.
+# Diun Clean-Install (Korrigierte Version)
+# Diese Version lädt die Konfiguration aus der "diun.yml"-Datei
+# und hält sich an unsere Core Architectural Concepts [cite: 9-11].
 
 services:
   diun:
-    # SRE Best Practice: Pinning der Version statt 'latest'
-    # verhindert, dass Diun selbst unkontrolliert aktualisiert wird.
-    image: crazymax/diun:4.28
+    # Wir verwenden 'latest' wie in der Doku [cite: 1-5]
+    image: crazymax/diun:latest
     container_name: diun
     restart: unless-stopped
     
-    # 1. KERNKONZEPT: Zentralisierte Konfiguration
-    # Lädt alle Konfigurationen (API-Keys, URLs, Zeitpläne)
-    # aus der globalen .env-Datei im Projekt-Root.
-    env_file:
-      - ../.env
+    # 'command: serve' ist erforderlich, wenn eine diun.yml
+    # verwendet wird (gemäß Doku [cite: 1-5]).
+    command: serve
 
-    # 2. KERNKONZEPT: Konsistente Berechtigungen
-    # Stellt sicher, dass der Container mit den Berechtigungen
-    # des Host-Benutzers (PUID/PGID 1000) läuft.
+    labels:
+      - "diun.enable=true"
+    
+    # SRE-FIX: Wir übergeben NUR noch Systemvariablen.
+    # Diese werden vom start-all.sh-Skript [cite: 118-119]
+    # aus der zentralen /docker/.env-Datei [cite: 9-11] geladen.
     environment:
-      - PUID=${PUID}
-      - PGID=${PGID}
-      # Alle DIUN_... Variablen werden aus der .env_file geladen.
+      # Für korrekte Dateiberechtigungen auf ./data
+      PUID: ${PUID}
+      PGID: ${PGID}
+      # Für korrekte Cron-Job-Zeiten
+      TZ: ${TZ}
 
     volumes:
-      # Benötigt, damit Diun die laufenden Container und ihre
-      # Image-Tags überwachen kann.
-      # :ro (read-only) ist eine zusätzliche Sicherheitsmaßnahme.
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Docker-Socket (read-only)
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
       
-      # 3. KERNKONZEPT: SELinux-konforme Bind-Mounts
-      # Persistenter Speicher für die Diun-Datenbank.
-      # Das :Z Flag ist auf Fedora-Systemen zwingend erforderlich,
-      # um "Permission Denied"-Fehler zu verhindern.
-      - ./data:/data:Z
+      # SELinux :Z Flag (Kritisch für Fedora [cite: 9-11])
+      - "./data:/data:Z"
       
-    # NETZWERK:
-    # Diun benötigt in dieser Konfiguration kein eigenes Netzwerk
-    # oder Traefik-Routing, da es keinen Web-Service bereitstellt,
-    # sondern nur ausgehende Webhooks an n8n sendet.
+      # SRE-FIX: Wir laden die Konfigurationsdatei
+      # (Read-only und mit :Z Flag für SELinux).
+      - "./diun.yml:/diun.yml:ro,Z"
+
+    # Netzwerk-Zuweisung, um n8n zu erreichen
+    networks:
+      - proxy-netzwerk
+
+# Netzwerk-Definition (Root-Ebene)
+networks:
+  proxy-netzwerk:
+    external: true
+

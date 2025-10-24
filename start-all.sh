@@ -1,107 +1,99 @@
 #!/bin/bash
+# SRE-Management-Skript (Version 3)
+# - Lädt die globale .env-Datei aus dem Root-Verzeichnis.
+# - Startet alle Services ODER nur die als Argumente übergebenen.
+# - NEU: Ignoriert kritische Proxy-Dienste beim Starten von "allen".
 
-# SRE Homelab - Master Start Script
-# Dieses Skript stellt sicher, dass die globale .env-Datei (Single Source of Truth)
-# *immer* korrekt geladen wird.
-#
-# USAGE:
-#   ./start-all.sh               (Startet ALLE Services in allen Unterverzeichnissen)
-#   ./start-all.sh diun          (Startet NUR den Service im Verzeichnis ./diun)
-#   ./start-all.sh diun n8n ...  (Startet alle angegebenen Services nacheinander)
+# --- SRE-SCHUTZ: KRITISCHE INFRASTRUKTUR ---
+# Diese Dienste werden beim Aufruf von "./start-all.sh" (ohne Argumente)
+# übersprungen, um ein versehentliches Stoppen/Neustarten zu verhindern.
+PROXY_SERVICES=("traefik" "authelia" "cloudflared")
+# ---------------------------------------------
 
-# --- Pruefungen ---
-# Stelle sicher, dass wir uns im Verzeichnis des Skripts befinden (z.B. /docker)
-cd "$(dirname "$0")"
-echo "Working directory: $(pwd)"
+# Stoppt das Skript, wenn ein Befehl fehlschlägt
+set -e
 
-# Finde die globale .env-Datei (Single Source of Truth)
-ENV_FILE_PATH="./.env"
+# Absoluten Pfad zum Skriptverzeichnis finden (robustere Methode)
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+cd "$SCRIPT_DIR"
+echo "Working directory: $SCRIPT_DIR"
 
-if [ ! -f "$ENV_FILE_PATH" ]; then
-    echo "-----------------------------------------------------"
-    echo "!! SRE CRITICAL ERROR !!"
-    echo "Globale .env-Datei nicht gefunden unter: $ENV_FILE_PATH"
-    echo "Kann keine Services ohne Konfiguration starten."
-    echo "-----------------------------------------------------"
+# Globale .env-Datei definieren
+ENV_FILE="$SCRIPT_DIR/.env"
+
+# Überprüfen, ob die globale .env-Datei existiert
+if [ ! -f "$ENV_FILE" ]; then
+    echo "FEHLER: Globale .env-Datei nicht gefunden unter: $ENV_FILE"
+    echo "Skript wird abgebrochen."
     exit 1
+else
+    echo "Global .env file found. Proceeding..."
 fi
 
-echo "Global .env file found. Proceeding..."
-echo " "
-
-# --- Argumenten-Handling ---
-
-if [ $# -eq 0 ]; then
-    # --- FALL 1: KEINE ARGUMENTE ---
-    # Starte alle Services (bisheriges Verhalten)
+# Fall 1: KEINE Argumente übergeben (Starte "alle" außer Proxys)
+if [ "$#" -eq 0 ]; then
+    echo "Starte alle nicht-kritischen Services..."
     
-    echo "Kein spezifischer Service angefordert. Starte ALLE Services..."
-
-    find . -mindepth 2 -name 'compose.yml' | while read -r composefile; do
-        DIR=$(dirname "$composefile")
+    # Iteriere über alle Unterverzeichnisse
+    for SERVICE_DIR in */; do
+        # Entferne den abschließenden Schrägstrich
+        SERVICE_NAME=$(basename "$SERVICE_DIR")
         
-        # Ignoriere Verzeichnisse, die mit '.' beginnen (z.B. .git, .vscode)
-        if [[ "$DIR" == *"/."* ]]; then
+        # --- PROXY-SCHUTZ-LOGIK ---
+        SKIP=false
+        for PROXY_SERVICE in "${PROXY_SERVICES[@]}"; do
+            if [ "$SERVICE_NAME" == "$PROXY_SERVICE" ]; then
+                SKIP=true
+                break
+            fi
+        done
+
+        if [ "$SKIP" = true ]; then
+            echo "--- Überspringe kritische Infrastruktur: $SERVICE_NAME ---"
+            continue
+        fi
+        # --- ENDE PROXY-SCHUTZ ---
+
+        # Validierung (überspringe, wenn keine compose-Datei vorhanden ist)
+        if [ -f "$SERVICE_DIR/compose.yml" ] || [ -f "$SERVICE_DIR/docker-compose.yml" ]; then
+            echo "--- Bearbeite Service: $SERVICE_NAME ---"
+            echo "Starte Services in: $SERVICE_DIR"
+            
+            # Führe den Befehl im Unterverzeichnis aus, aber lade die .env-Datei aus dem Root
+            (cd "$SERVICE_DIR" && docker compose --env-file "$ENV_FILE" up -d --force-recreate)
+            
+            echo "-----------------------------------------------------"
+        else
+            echo "--- Überspringe Verzeichnis (keine Compose-Datei): $SERVICE_NAME ---"
+        fi
+    done
+    echo "Alle nicht-kritischen Services wurden verarbeitet."
+
+# Fall 2: Argumente übergeben (Starte nur diese)
+else
+    echo "Spezifische Services angefordert: $@"
+    
+    for SERVICE_NAME in "$@"; do
+        SERVICE_DIR="./$SERVICE_NAME"
+        
+        # Validierung
+        if [ ! -d "$SERVICE_DIR" ]; then
+            echo "FEHLER: Verzeichnis $SERVICE_DIR für Service $SERVICE_NAME nicht gefunden."
+            continue
+        fi
+        if [ ! -f "$SERVICE_DIR/compose.yml" ] && [ ! -f "$SERVICE_DIR/docker-compose.yml" ]; then
+            echo "FEHLER: Keine Compose-Datei in $SERVICE_DIR gefunden."
             continue
         fi
         
-        echo "-----------------------------------------------------"
-        echo "Starting services in: $DIR"
-        echo "-----------------------------------------------------"
-        (
-            # WICHTIG: Lade die .env-Datei aus dem Root-Verzeichnis
-            cd "$DIR" && docker compose --env-file ../.env up -d --remove-orphans
-        )
-        echo " "
-    done
-    
-    echo "Alle Services wurden verarbeitet."
-
-else
-    # --- FALL 2: EIN ODER MEHR ARGUMENTE ---
-    # Starte nur die spezifisch angeforderten Services
-    
-    echo "Spezifische Services angefordert: $@"
-    echo " "
-    
-    # Iteriere durch JEDES Argument, das dem Skript übergeben wurde
-    for SERVICE_NAME in "$@"; do
-    
-        SERVICE_DIR="./$SERVICE_NAME"
-        SERVICE_COMPOSE_FILE="$SERVICE_DIR/compose.yml"
-        
         echo "--- Bearbeite Service: $SERVICE_NAME ---"
-
-        # --- Validierung (SRE-Prinzip: Verhindere Fehler) ---
-        if [ ! -d "$SERVICE_DIR" ]; then
-            echo "!! SRE VALIDATION ERROR !!"
-            echo "Verzeichnis nicht gefunden: $SERVICE_DIR"
-            echo "-> Service $SERVICE_NAME wird ÜBERSPRUNGEN."
-            echo "-----------------------------------------------------"
-            echo " "
-            continue # Mache mit dem nächsten Argument weiter
-        fi
-        
-        if [ ! -f "$SERVICE_COMPOSE_FILE" ]; then
-            echo "!! SRE VALIDATION ERROR !!"
-            echo "compose.yml nicht gefunden in $SERVICE_DIR"
-            echo "-> Service $SERVICE_NAME wird ÜBERSPRUNGEN."
-            echo "-----------------------------------------------------"
-            echo " "
-            continue # Mache mit dem nächsten Argument weiter
-        fi
-
-        # --- Ausfuehrung ---
         echo "Starte Services in: $SERVICE_DIR"
-        (
-            # WICHTIG: Lade die .env-Datei aus dem Root-Verzeichnis
-            cd "$SERVICE_DIR" && docker compose --env-file ../.env up -d --remove-orphans
-        )
+        
+        # Führe den Befehl im Unterverzeichnis aus
+        (cd "$SERVICE_DIR" && docker compose --env-file "$ENV_FILE" up -d --force-recreate)
+        
         echo "-----------------------------------------------------"
-        echo " "
     done
-    
     echo "Alle angeforderten Services wurden verarbeitet."
 fi
 
-exit 0

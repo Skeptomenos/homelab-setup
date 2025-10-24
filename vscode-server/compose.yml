@@ -19,6 +19,7 @@ services:
     networks:
       - proxy-netzwerk
     labels:
+      - "diun.enable=true"
       - "traefik.enable=true"
       - "traefik.http.routers.vscode-server.rule=Host(`${SUBDOMAIN_VSCODE}.${DOMAIN_PUBLIC}`)"
       #- "traefik.http.routers.vscode-server.rule=Host(`${SUBDOMAIN_VSCODE}.${DOMAIN_LOCAL}`) || Host(`${SUBDOMAIN_VSCODE}.${DOMAIN_PUBLIC}`)"

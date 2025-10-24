@@ -21,6 +21,7 @@ services:
     networks:
       - proxy-netzwerk
     labels:
+      - "diun.enable=true"
       - "traefik.enable=true"
       
       # --- Router-Definition ---

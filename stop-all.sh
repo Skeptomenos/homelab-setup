@@ -1,107 +1,80 @@
 #!/bin/bash
+# SRE-Management-Skript (Version 3)
+# - Lädt die globale .env-Datei aus dem Root-Verzeichnis.
+# - Stoppt alle Services ODER nur die als Argumente übergebenen.
+# - NEU: Ignoriert kritische Proxy-Dienste beim Stoppen von "allen".
 
-# SRE Homelab - Master Stop Script
-# Dieses Skript stellt sicher, dass die globale .env-Datei (Single Source of Truth)
-# *immer* korrekt geladen wird, um Services sauber herunterzufahren.
-#
-# USAGE:
-#   ./stop-all.sh               (Stoppt ALLE Services in allen Unterverzeichnissen)
-#   ./stop-all.sh diun          (Stoppt NUR den Service im Verzeichnis ./diun)
-#   ./stop-all.sh diun n8n ...  (Stoppt alle angegebenen Services nacheinander)
+# --- SRE-SCHUTZ: KRITISCHE INFRASTRUKTUR ---
+PROXY_SERVICES=("traefik" "authelia" "cloudflared")
+# ---------------------------------------------
 
-# --- Pruefungen ---
-# Stelle sicher, dass wir uns im Verzeichnis des Skripts befinden (z.B. /docker)
-cd "$(dirname "$0")"
-echo "Working directory: $(pwd)"
+set -e
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+cd "$SCRIPT_DIR"
+echo "Working directory: $SCRIPT_DIR"
+ENV_FILE="$SCRIPT_DIR/.env"
 
-# Finde die globale .env-Datei (Single Source of Truth)
-ENV_FILE_PATH="./.env"
-
-if [ ! -f "$ENV_FILE_PATH" ]; then
-    echo "-----------------------------------------------------"
-    echo "!! SRE CRITICAL ERROR !!"
-    echo "Globale .env-Datei nicht gefunden unter: $ENV_FILE_PATH"
-    echo "Kann Status der Services nicht verwalten."
-    echo "-----------------------------------------------------"
+if [ ! -f "$ENV_FILE" ]; then
+    echo "FEHLER: Globale .env-Datei nicht gefunden unter: $ENV_FILE"
     exit 1
+else
+    echo "Global .env file found. Proceeding..."
 fi
 
-echo "Global .env file found. Proceeding..."
-echo " "
-
-# --- Argumenten-Handling ---
-
-if [ $# -eq 0 ]; then
-    # --- FALL 1: KEINE ARGUMENTE ---
-    # Stoppe alle Services (bisheriges Verhalten)
+# Fall 1: KEINE Argumente übergeben (Stoppe "alle" außer Proxys)
+if [ "$#" -eq 0 ]; then
+    echo "Stoppe alle nicht-kritischen Services..."
     
-    echo "Kein spezifischer Service angefordert. Stoppe ALLE Services..."
-
-    find . -mindepth 2 -name 'compose.yml' | while read -r composefile; do
-        DIR=$(dirname "$composefile")
+    for SERVICE_DIR in */; do
+        SERVICE_NAME=$(basename "$SERVICE_DIR")
         
-        # Ignoriere Verzeichnisse, die mit '.' beginnen (z.B. .git, .vscode)
-        if [[ "$DIR" == *"/."* ]]; then
+        # --- PROXY-SCHUTZ-LOGIK ---
+        SKIP=false
+        for PROXY_SERVICE in "${PROXY_SERVICES[@]}"; do
+            if [ "$SERVICE_NAME" == "$PROXY_SERVICE" ]; then
+                SKIP=true
+                break
+            fi
+        done
+
+        if [ "$SKIP" = true ]; then
+            echo "--- Überspringe kritische Infrastruktur: $SERVICE_NAME ---"
+            continue
+        fi
+        # --- ENDE PROXY-SCHUTZ ---
+
+        if [ -f "$SERVICE_DIR/compose.yml" ] || [ -f "$SERVICE_DIR/docker-compose.yml" ]; then
+            echo "--- Bearbeite Service: $SERVICE_NAME ---"
+            echo "Stoppe Services in: $SERVICE_DIR"
+            (cd "$SERVICE_DIR" && docker compose --env-file "$ENV_FILE" down)
+            echo "-----------------------------------------------------"
+        else
+            echo "--- Überspringe Verzeichnis (keine Compose-Datei): $SERVICE_NAME ---"
+        fi
+    done
+    echo "Alle nicht-kritischen Services wurden heruntergefahren."
+
+# Fall 2: Argumente übergeben (Stoppe nur diese)
+else
+    echo "Spezifische Services zum Stoppen angefordert: $@"
+    
+    for SERVICE_NAME in "$@"; do
+        SERVICE_DIR="./$SERVICE_NAME"
+        
+        if [ ! -d "$SERVICE_DIR" ]; then
+            echo "FEHLER: Verzeichnis $SERVICE_DIR für Service $SERVICE_NAME nicht gefunden."
+            continue
+        fi
+        if [ ! -f "$SERVICE_DIR/compose.yml" ] && [ ! -f "$SERVICE_DIR/docker-compose.yml" ]; then
+            echo "FEHLER: Keine Compose-Datei in $SERVICE_DIR gefunden."
             continue
         fi
         
-        echo "-----------------------------------------------------"
-        echo "Stopping services in: $DIR"
-        echo "-----------------------------------------------------"
-        (
-            # WICHTIG: Lade die .env-Datei aus dem Root-Verzeichnis
-            cd "$DIR" && docker compose --env-file ../.env down --remove-orphans
-        )
-        echo " "
-    done
-    
-    echo "Alle Services wurden heruntergefahren."
-
-else
-    # --- FALL 2: EIN ODER MEHR ARGUMENTE ---
-    # Stoppe nur die spezifisch angeforderten Services
-    
-    echo "Spezifische Services zum Stoppen angefordert: $@"
-    echo " "
-    
-    # Iteriere durch JEDES Argument, das dem Skript übergeben wurde
-    for SERVICE_NAME in "$@"; do
-    
-        SERVICE_DIR="./$SERVICE_NAME"
-        SERVICE_COMPOSE_FILE="$SERVICE_DIR/compose.yml"
-        
         echo "--- Bearbeite Service: $SERVICE_NAME ---"
-
-        # --- Validierung (SRE-Prinzip: Verhindere Fehler) ---
-        if [ ! -d "$SERVICE_DIR" ]; then
-            echo "!! SRE VALIDATION ERROR !!"
-            echo "Verzeichnis nicht gefunden: $SERVICE_DIR"
-            echo "-> Service $SERVICE_NAME wird ÜBERSPRUNGEN."
-            echo "-----------------------------------------------------"
-            echo " "
-            continue # Mache mit dem nächsten Argument weiter
-        fi
-        
-        if [ ! -f "$SERVICE_COMPOSE_FILE" ]; then
-            echo "!! SRE VALIDATION ERROR !!"
-            echo "compose.yml nicht gefunden in $SERVICE_DIR"
-            echo "-> Service $SERVICE_NAME wird ÜBERSPRUNGEN."
-            echo "-----------------------------------------------------"
-            echo " "
-            continue # Mache mit dem nächsten Argument weiter
-        fi
-
-        # --- Ausfuehrung ---
         echo "Stoppe Services in: $SERVICE_DIR"
-        (
-            # WICHTIG: Lade die .env-Datei aus dem Root-Verzeichnis
-            cd "$DIR" && docker compose --env-file ../.env down --remove-orphans
-        )
+        (cd "$SERVICE_DIR" && docker compose --env-file "$ENV_FILE" down)
         echo "-----------------------------------------------------"
-        echo " "
     done
-    
     echo "Alle angeforderten Services wurden heruntergefahren."
 fi
 
-exit 0

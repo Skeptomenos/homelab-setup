@@ -1,0 +1,40 @@
+# Dies ist die zentrale Konfigurationsdatei für Diun.
+# Sie wird von der compose.yml-Datei geladen und
+# basiert auf der offiziellen Dokumentation.
+
+# LOG-EINSTELLUNGEN
+log:
+  level: "info"
+
+# WATCH-EINSTELLUNGEN (gemäß _watch - Diun.pdf)
+# Definiert, wie oft Diun nach Updates sucht.
+watch:
+  # Standardwerte aus der Dokumentation für Stabilität
+  workers: 10
+  runOnStartup: true
+  compareDigest: true
+  jitter: "30s"
+  
+  # Dein Cron-Zeitplan
+  schedule: "0 3 * * *"
+
+# PROVIDER-EINSTELLUNGEN (gemäß Docker - Diun.pdf)
+# Sagt Diun, *was* es überwachen soll (unsere Docker-Container).
+providers:
+  docker:
+    # Überwacht auch gestoppte Container
+    watchStopped: true
+    
+    # SRE-Best-Practice: "false" ist der Standard, aber wir
+    # setzen es explizit. Das erzwingt, dass wir Container
+    # per Label "diun.enable=true" aktivieren müssen.
+    watchByDefault: false
+
+# NOTIFIER-EINSTELLUNGEN (gemäß Webhook - Diun.pdf)
+# Sagt Diun, *wohin* es Benachrichtigungen senden soll.
+notif:
+  webhook:
+    # SRE-FIX (basierend auf Doku): Der korrekte Name ist "endpoint".
+    endpoint: "http://n8n:5678/webhook/160eaed2-98b8-4160-8f21-062400a5f00c"
+    method: "POST"
+
