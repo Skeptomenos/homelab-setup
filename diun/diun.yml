@@ -1,40 +1,29 @@
-# Dies ist die zentrale Konfigurationsdatei für Diun.
-# Sie wird von der compose.yml-Datei geladen und
-# basiert auf der offiziellen Dokumentation.
+# Diun Application-Logic Configuration
+# Based on official documentation and our SRE principles
 
-# LOG-EINSTELLUNGEN
-log:
-  level: "info"
-
-# WATCH-EINSTELLUNGEN (gemäß _watch - Diun.pdf)
-# Definiert, wie oft Diun nach Updates sucht.
+# Watch configuration (from _watch - Diun.pdf)
 watch:
-  # Standardwerte aus der Dokumentation für Stabilität
-  workers: 10
-  runOnStartup: true
-  compareDigest: true
-  jitter: "30s"
-  
-  # Dein Cron-Zeitplan
   schedule: "0 3 * * *"
+  
+  # SRE-FIX: This is our new manual trigger.
+  # Restarting the container will now force a full scan.
+  runOnStartup: true
 
-# PROVIDER-EINSTELLUNGEN (gemäß Docker - Diun.pdf)
-# Sagt Diun, *was* es überwachen soll (unsere Docker-Container).
+# Provider configuration (from Docker - Diun.pdf)
 providers:
   docker:
-    # Überwacht auch gestoppte Container
+    # SRE-FIX: Die redundante "docker: true"-Zeile wurde entfernt.
+    # watchStopped ist eine gültige Docker-Provider-Einstellung.
     watchStopped: true
-    
-    # SRE-Best-Practice: "false" ist der Standard, aber wir
-    # setzen es explizit. Das erzwingt, dass wir Container
-    # per Label "diun.enable=true" aktivieren müssen.
     watchByDefault: false
 
-# NOTIFIER-EINSTELLUNGEN (gemäß Webhook - Diun.pdf)
-# Sagt Diun, *wohin* es Benachrichtigungen senden soll.
+# Notifier configuration (from Webhook - Diun.pdf)
 notif:
   webhook:
-    # SRE-FIX (basierend auf Doku): Der korrekte Name ist "endpoint".
-    endpoint: "http://n8n:5678/webhook/160eaed2-98b8-4160-8f21-062400a5f00c"
+    # This is the single, permanent "Production" URL for n8n
+    # We use the internal Docker DNS name (n8n) and port (5678)
+
+    endpoint: "http://n8n:5678/webhook-test/160eaed2-98b8-4160-8f21-062400a5f00c"   # Test
+    #endpoint: "http://n8n:5678/webhook/160eaed2-98b8-4160-8f21-062400a5f00c"  # Production
     method: "POST"
 

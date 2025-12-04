@@ -77,7 +77,7 @@ services:
 
   # Home Assistant ist die zentrale Steuerungssoftware.
   homeassistant:
-    image: "ghcr.io/home-assistant/home-assistant:stable"
+    image: "homeassistant/home-assistant:stable"
     container_name: homeassistant
     restart: unless-stopped
     command: ["python", "-m", "homeassistant", "--config", "/config"]
@@ -100,7 +100,8 @@ services:
       - "traefik.http.routers.homeassistant.entrypoints=websecure"
       - "traefik.http.routers.homeassistant.tls=true"
       - "traefik.http.routers.homeassistant.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.homeassistant.middlewares=authelia@docker"
+      # authelia not necessary, home assistant has own authentication layer
+      #- "traefik.http.routers.homeassistant.middlewares=authelia@docker"
       - "traefik.http.services.homeassistant.loadbalancer.server.port=8123"
 
 # Top-Level-Definition der Docker-Volumes, die von den Diensten verwendet werden.

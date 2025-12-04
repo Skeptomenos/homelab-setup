@@ -1,11 +1,12 @@
 #!/bin/bash
-# SRE-Management-Skript (Version 3)
+# SRE-Management-Skript (Version 4)
 # - Lädt die globale .env-Datei aus dem Root-Verzeichnis.
 # - Stoppt alle Services ODER nur die als Argumente übergebenen.
-# - NEU: Ignoriert kritische Proxy-Dienste beim Stoppen von "allen".
+# - Ignoriert kritische Proxy-Dienste beim Stoppen von "allen".
 
 # --- SRE-SCHUTZ: KRITISCHE INFRASTRUKTUR ---
-PROXY_SERVICES=("traefik" "authelia" "cloudflared")
+# SRE-FIX: Das Array enthält jetzt den Verzeichnisnamen "proxy".
+PROXY_SERVICES=("proxy" "traefik" "authelia" "cloudflared")
 # ---------------------------------------------
 
 set -e

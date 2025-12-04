@@ -70,4 +70,4 @@ vscode-server/config/
 
 # --- DIUN ---
 # Ignore DIUN's database
-diun/data/
+diun/data/ 

@@ -20,11 +20,14 @@ services:
     # Diese werden vom start-all.sh-Skript [cite: 118-119]
     # aus der zentralen /docker/.env-Datei [cite: 9-11] geladen.
     environment:
-      # Für korrekte Dateiberechtigungen auf ./data
-      PUID: ${PUID}
-      PGID: ${PGID}
-      # Für korrekte Cron-Job-Zeiten
-      TZ: ${TZ}
+      # Systemvariablen aus der globalen .env
+      - "TZ=${TZ}"
+      - "PUID=${PUID}"
+      - "PGID=${PGID}"
+      
+      # SRE-FIX: Log-Level auf Debug erhöhen, um stille
+      # Netzwerkfehler beim Senden des Webhooks zu sehen.
+      - "LOG_LEVEL=debug"
 
     volumes:
       # Docker-Socket (read-only)
@@ -37,6 +40,9 @@ services:
       # (Read-only und mit :Z Flag für SELinux).
       - "./diun.yml:/diun.yml:ro,Z"
 
+
+    security_opt:
+      - "label:type:container_t"
     # Netzwerk-Zuweisung, um n8n zu erreichen
     networks:
       - proxy-netzwerk

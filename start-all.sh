@@ -1,13 +1,12 @@
 #!/bin/bash
-# SRE-Management-Skript (Version 3)
+# SRE-Management-Skript (Version 4)
 # - Lädt die globale .env-Datei aus dem Root-Verzeichnis.
 # - Startet alle Services ODER nur die als Argumente übergebenen.
-# - NEU: Ignoriert kritische Proxy-Dienste beim Starten von "allen".
+# - Ignoriert kritische Proxy-Dienste beim Starten von "allen".
 
 # --- SRE-SCHUTZ: KRITISCHE INFRASTRUKTUR ---
-# Diese Dienste werden beim Aufruf von "./start-all.sh" (ohne Argumente)
-# übersprungen, um ein versehentliches Stoppen/Neustarten zu verhindern.
-PROXY_SERVICES=("traefik" "authelia" "cloudflared")
+# SRE-FIX: Das Array enthält jetzt den Verzeichnisnamen "proxy".
+PROXY_SERVICES=("proxy" "traefik" "authelia" "cloudflared")
 # ---------------------------------------------
 
 # Stoppt das Skript, wenn ein Befehl fehlschlägt
