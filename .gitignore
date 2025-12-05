@@ -38,10 +38,11 @@ home-automation/homeassistant/config/
 home-automation/homeassistant/influxdb2/
 home-automation/homeassistant/influxdb/
 
-# Ignore Mosquitto data and logs
+# Ignore Mosquitto data and logs (but keep config file)
 home-automation/mosquitto/data/
 home-automation/mosquitto/log/
-home-automation/mosquitto/config/
+home-automation/mosquitto/config/*
+!home-automation/mosquitto/config/mosquitto.conf
 
 # For Zigbee2MQTT, ignore everything in the data folder except the configuration
 home-automation/zigbee2mqtt/z2m-data/*
@@ -70,4 +71,8 @@ vscode-server/config/
 
 # --- DIUN ---
 # Ignore DIUN's database
-diun/data/ 
+diun/data/
+
+# --- Portfolio Proxy ---
+# Ignore any local .env files
+portfolio-proxy/.env
