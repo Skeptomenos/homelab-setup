@@ -38,11 +38,11 @@ home-automation/homeassistant/config/
 home-automation/homeassistant/influxdb2/
 home-automation/homeassistant/influxdb/
 
-# Ignore Mosquitto data and logs (but keep config file)
+# Ignore Mosquitto data, logs, and runtime config (but keep example)
 home-automation/mosquitto/data/
 home-automation/mosquitto/log/
 home-automation/mosquitto/config/*
-!home-automation/mosquitto/config/mosquitto.conf
+!home-automation/mosquitto/config/mosquitto.conf.example
 
 # For Zigbee2MQTT, ignore everything in the data folder except the configuration
 home-automation/zigbee2mqtt/z2m-data/*
