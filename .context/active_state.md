@@ -7,17 +7,23 @@
 - Secrets via .env only
 - Traefik routing for public services
 - Proxy stack is critical infrastructure—validate before deploy
-- Keep Docker-dependent images (Traefik) updated when Docker daemon changes
+- TeslaLogger uses hardcoded DB credentials (teslalogger/teslalogger)
+- TeslaLogger service names: `database`, `grafana`, `webserver` (not prefixed)
 
 ## Recent Completed
-- Traefik v3.6.2 update (Docker API 1.44+ compatibility)
+- TeslaLogger database migration from Raspberry Pi ✅
+- TeslaLogger compose.yml fixes (service names, Docker socket)
+- Traefik v3.6.2 update (Docker API compatibility)
 - Traefik static config fix (removed invalid http.middlewares)
 - Security audit + hardening (78 issues addressed)
-- Portfolio-proxy service created
-- All READMEs rewritten
+- All READMEs rewritten with architecture diagrams
+
+## Active Services
+- TeslaLogger: Car "Harnasch" (Model 3 LR) loaded and connected
+- Grafana: Dashboards available at grafana.helmus.me
+- All proxy services operational
 
 ## Next Actions (User)
-1. Deploy: `git pull && docker compose -f proxy/compose.yml pull && docker compose -f proxy/compose.yml up -d`
-2. Verify: `docker logs traefik` shows no API errors
-3. Rotate: Cloudflare API token (was exposed)
-4. Pi-hole: Configure `*.homelab.local` DNS
+1. Verify Grafana dashboards have historical data
+2. Decommission Raspberry Pi TeslaLogger
+3. Consider rotating exposed credentials
