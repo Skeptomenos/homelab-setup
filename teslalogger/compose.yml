@@ -67,7 +67,7 @@ services:
       - com.centurylinklabs.watchtower.scope=teslalogger-stack
       
       
-  teslalogger-grafana:
+  grafana:
     image: bassmaster187/teslalogger-grafana:1.63.9.3
     container_name: teslalogger-grafana
     restart: always
@@ -103,7 +103,7 @@ services:
       - "traefik.http.services.teslalogger-grafana.loadbalancer.server.port=3000"
       - "traefik.http.routers.teslalogger-grafana.tls.certresolver=letsencrypt"
 
-  teslalogger-webserver:
+  webserver:
     image: bassmaster187/teslalogger-webserver:1.63.9.3
     container_name: teslalogger-webserver
     restart: always
@@ -114,7 +114,7 @@ services:
       #- ./www:/var/www/html
     depends_on:
       - teslalogger
-      - teslalogger-grafana
+      - grafana
     # Port removed - Webserver accessed via Traefik only
     environment:
       - PUID=${PUID:-1000}
