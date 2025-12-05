@@ -19,6 +19,7 @@ services:
       - ${APPDATA_PATH:-.}/backup:/etc/teslalogger/backup:Z
       - ${APPDATA_PATH:-.}/invoices:/etc/teslalogger/Debug/net8.0/tesla_invoices:Z
       - teslalogger-net8-data:/etc/teslalogger/data
+      - /var/run/docker.sock:/var/run/docker.sock  # Required for TeslaLogger to restart Grafana
     depends_on:
       - database
     environment:
