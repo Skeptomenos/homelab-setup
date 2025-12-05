@@ -56,8 +56,15 @@ coding/             # AI framework and templates
 
 ```bash
 # Start all:  ./start-all.sh       Stop all:  ./stop-all.sh
-# Start one:  docker compose -f <dir>/compose.yml up -d
-# Logs:       docker compose -f <dir>/compose.yml logs -f
+
+# Start one service (from /docker root):
+docker compose -f <dir>/compose.yml --env-file .env up -d
+
+# Start one service (from within service folder):
+docker compose --env-file ../.env up -d
+
+# Logs:
+docker compose -f <dir>/compose.yml logs -f
 ```
 
 ## Constraints
