@@ -31,3 +31,8 @@ This document tracks the specific constraints, patterns, and lessons learned *du
 *   Do not use `start-all.sh`/`stop-all.sh` for proxy stack—causes tunnel disruption
 *   Do not expose ports directly on host for public services—use Traefik routing only
 *   Do not hardcode secrets in compose files—always reference `.env` variables
+
+### 3.1. Traefik Static Config Does NOT Support http.middlewares
+- **Learning:** Adding `http:` block with `middlewares:` to `traefik.yml` (static config) silently breaks all routing—Traefik returns 404 for every request without any config error
+- **Mandate:** NEVER add `http.middlewares` to `traefik.yml`. Define middlewares via Docker labels on containers or in dynamic config files only
+- **Outcome:** Security headers and other middlewares must be defined in `compose.yml` labels (e.g., `traefik.http.middlewares.security-headers.headers.stsSeconds=31536000`)

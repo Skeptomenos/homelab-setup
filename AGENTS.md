@@ -68,6 +68,13 @@ coding/             # AI framework and templates
 - Public routes require Authelia middleware; local routes are optional
 - Proxy stack managed separately—`start-all.sh`/`stop-all.sh` skip it
 
+**CRITICAL: Proxy Stack (`proxy/`) is high-risk infrastructure:**
+- Changes to Traefik/Authelia can break ALL services instantly
+- Always validate config before deploying: `docker compose config`
+- Traefik static config (`traefik.yml`) does NOT support `http.middlewares`—use Docker labels
+- Test changes on non-production first if possible
+- Keep backup of working config before modifying
+
 ## State Files
 
 `.context/active_state.md` (current) | `.context/handover.md` (previous) | `docs/specs/tasks.md` (plan)

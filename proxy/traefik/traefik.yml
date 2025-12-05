@@ -27,19 +27,6 @@ entryPoints:
   websecure:
     address: ":443"
 
-# Security headers middleware - apply to routes as needed
-http:
-  middlewares:
-    security-headers:
-      headers:
-        stsSeconds: 31536000
-        stsIncludeSubdomains: true
-        stsPreload: true
-        contentTypeNosniff: true
-        frameDeny: true
-        browserXssFilter: true
-        referrerPolicy: "strict-origin-when-cross-origin"
-
 # Definition der "Provider", die Traefik nach neuen Routen durchsucht
 providers:
   docker:
