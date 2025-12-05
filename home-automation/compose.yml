@@ -84,9 +84,9 @@ services:
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
-    # Port bound to localhost only - public access via Traefik
+    # Port exposed for direct LAN access (http://192.168.178.2:8123)
     ports:
-      - "127.0.0.1:8123:8123"
+      - "8123:8123"
     environment:
       - TZ=${TZ}
     volumes:
@@ -100,12 +100,20 @@ services:
     labels:
       - "diun.enable=true"
       - "traefik.enable=true"
+      
+      # --- Public router (external access via Cloudflare) ---
       - "traefik.http.routers.homeassistant.rule=Host(`${SUBDOMAIN_HOMEASSISTANT}.${DOMAIN_PUBLIC}`)"
       - "traefik.http.routers.homeassistant.entrypoints=websecure"
       - "traefik.http.routers.homeassistant.tls=true"
       - "traefik.http.routers.homeassistant.tls.certresolver=letsencrypt"
-      # authelia not necessary, home assistant has own authentication layer
-      #- "traefik.http.routers.homeassistant.middlewares=authelia@docker"
+      - "traefik.http.routers.homeassistant.service=homeassistant"
+      
+      # --- Local router (LAN access via Traefik) ---
+      - "traefik.http.routers.homeassistant-local.rule=Host(`${SUBDOMAIN_HOMEASSISTANT}.${DOMAIN_LOCAL}`)"
+      - "traefik.http.routers.homeassistant-local.entrypoints=http"
+      - "traefik.http.routers.homeassistant-local.service=homeassistant"
+      
+      # --- Service definition (shared by both routers) ---
       - "traefik.http.services.homeassistant.loadbalancer.server.port=8123"
 
 # Top-Level-Definition der Docker-Volumes, die von den Diensten verwendet werden.
