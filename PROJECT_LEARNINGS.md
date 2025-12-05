@@ -36,3 +36,8 @@ This document tracks the specific constraints, patterns, and lessons learned *du
 - **Learning:** Adding `http:` block with `middlewares:` to `traefik.yml` (static config) silently breaks all routing—Traefik returns 404 for every request without any config error
 - **Mandate:** NEVER add `http.middlewares` to `traefik.yml`. Define middlewares via Docker labels on containers or in dynamic config files only
 - **Outcome:** Security headers and other middlewares must be defined in `compose.yml` labels (e.g., `traefik.http.middlewares.security-headers.headers.stsSeconds=31536000`)
+
+### 3.2. Docker API Version Compatibility with Pinned Images
+- **Learning:** Docker v29+ (Dec 2025) requires minimum API 1.44. Older images (e.g., Traefik v3.5.2 from Sept 2025) use API 1.24 and fail with "client version 1.24 is too old" error. This breaks silently—container starts but cannot communicate with Docker daemon.
+- **Mandate:** When Docker daemon is updated, check that pinned images are compatible. Traefik and other Docker-socket-dependent services are especially vulnerable. Use recent image versions (within 2-3 months of Docker release).
+- **Outcome:** Updated Traefik from v3.5.2 → v3.6.2. Consider using floating minor tags (e.g., `traefik:v3.6`) for auto-patch updates, or implement Diun alerts for critical infrastructure.

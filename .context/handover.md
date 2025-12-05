@@ -1,25 +1,34 @@
 # Handover Summary
 
 **Last Updated:** 2025-12-05  
-**Session Focus:** Fix Traefik 404 routing failure + security audit wrap-up
+**Session Focus:** Fix Traefik routing failure (two separate issues)
 
 ---
 
 ## Where Are We?
 
-- **Traefik fix applied:** Removed invalid `http.middlewares` block from `proxy/traefik/traefik.yml` that was causing 404 on all routes
-- **Warning added:** `AGENTS.md` now includes critical warning about proxy stack changes
-- **Learning documented:** Added anti-pattern to `PROJECT_LEARNINGS.md` about Traefik static vs dynamic config
+- **Issue 1 Fixed:** Removed invalid `http.middlewares` block from `proxy/traefik/traefik.yml` (static config doesn't support this)
+- **Issue 2 Fixed:** Updated Traefik from v3.5.2 → v3.6.2 to resolve Docker API 1.44+ compatibility
+- **Root Cause:** Docker v29.1.2 (Dec 2025) dropped support for API <1.44; Traefik v3.5.2 (Sept 2025) used API 1.24
 
 ## What's Next?
 
-1. **Deploy on server:** `git pull && docker compose -f proxy/compose.yml up -d`
-2. **Verify services:** Confirm no more 404 errors, all routes accessible
-3. **Configure Pi-hole:** Add local DNS entries for `*.homelab.local` → `192.168.178.2`
-4. **Optional:** Re-add security headers via Docker labels in `proxy/compose.yml` if needed
+1. **Deploy on server:**
+   ```bash
+   git pull
+   docker compose -f proxy/compose.yml pull traefik
+   docker compose -f proxy/compose.yml up -d
+   ```
+2. **Verify:** Check `docker logs traefik` - no more API version errors
+3. **Rotate Cloudflare token:** `CF_DNS_API_TOKEN` was exposed in debug output
+4. **Configure Pi-hole:** Add `*.homelab.local` → `192.168.178.2`
 
-## Key Context
+## Key Learnings (Added to PROJECT_LEARNINGS.md)
 
-- Server IP: `192.168.178.2`
-- Domain: `helmus.me` (public via Cloudflare), `homelab.local` (local)
-- Root cause: Traefik v3 static config (`traefik.yml`) does NOT support `http:` block with middlewares—must use Docker labels or dynamic config files
+1. **Traefik static config:** Does NOT support `http.middlewares` - use Docker labels
+2. **Docker API compatibility:** Pinned images can break when Docker daemon is updated; keep images within 2-3 months of Docker version
+
+## Commits This Session
+
+- `7b9284c` - Fix Traefik 404: remove invalid http.middlewares from static config
+- `9e8bf6e` - Update Traefik to v3.6.2 for Docker API 1.44+ compatibility
