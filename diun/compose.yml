@@ -5,7 +5,7 @@
 services:
   diun:
     # Wir verwenden 'latest' wie in der Doku [cite: 1-5]
-    image: crazymax/diun:latest
+    image: crazymax/diun:4.30.0
     container_name: diun
     restart: unless-stopped
     
@@ -43,6 +43,7 @@ services:
 
     security_opt:
       - "label:type:container_t"
+      - no-new-privileges:true
     # Netzwerk-Zuweisung, um n8n zu erreichen
     networks:
       - proxy-netzwerk

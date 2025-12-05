@@ -1,50 +1,80 @@
-Portainer - Docker Management UI
-This directory contains the compose.yml file to run Portainer Community Edition. Portainer provides a user-friendly web interface to manage all aspects of this Docker environment, including containers, images, volumes, and networks.
+# Portainer Container Management
 
-Configuration in this Setup
-Standalone Service: Portainer is configured as an independent infrastructure service.
+Web-based Docker management interface. Provides GUI for managing containers, images, volumes, and networks.
 
-Persistent Data: Portainer's configuration is stored in the ./data volume within this directory.
+## Access
 
-URL: The service is exposed by Traefik and is accessible at https://portainer.local.
+| Type | URL |
+|------|-----|
+| Public | `https://portainer.yourdomain.com` |
 
-Security: Access to the Portainer UI is protected by Authelia. You must first log in via the central Authelia portal before you can reach the Portainer login page.
+Protected by Authelia SSO, then Portainer's own login.
 
-How to Access
-Ensure portainer.local is correctly mapped to 192.168.178.60 in your local hosts file.
+## Features
 
-Open your web browser and navigate to https://portainer.local.
+- Container management (start, stop, logs, shell)
+- Image management (pull, remove)
+- Volume and network management
+- Stack deployment (compose files)
+- Container resource monitoring
 
-You will be redirected to the Authelia login page. Log in with your credentials.
+## Directory Structure
 
-After successful authentication, you will be forwarded to the Portainer UI.
+```
+portainer/
+├── compose.yml
+└── data/          # Portainer config (persistent)
+```
 
-Log in to Portainer with the local admin credentials you created during its initial setup.
+## Configuration
 
-Note: Since we use a self-signed SSL certificate, your browser will show a security warning on the first visit. You must accept the risk to proceed.
+Portainer requires access to the Docker socket to manage containers:
 
-Initial Setup (First Use Only)
-When you access Portainer for the first time, you will be prompted to:
+```yaml
+volumes:
+  - /var/run/docker.sock:/var/run/docker.sock
+  - ./data:/data:Z
+```
 
-Create an initial administrator user account. Choose a strong password.
+## Usage
 
-Connect to a Docker environment. Select the "Docker" option to manage the local Docker instance via its socket (/var/run/docker.sock).
+### Start
 
-Managing the Portainer Service
-All commands to manage the Portainer container should be run from this directory (/srv/docker/portainer/).
+```bash
+docker compose --env-file ../.env up -d
+```
 
-Start or update Portainer:
+### Initial Setup
 
-docker compose up -d
+On first access:
 
-Stop Portainer:
+1. Create admin account (choose strong password)
+2. Select "Docker" environment
+3. Connect to local Docker socket
 
-docker compose down
+### Commands
 
-View logs:
-
+```bash
+# View logs
 docker compose logs -f
 
-Restart Portainer:
-
+# Restart
 docker compose restart
+
+# Stop
+docker compose down
+```
+
+## Security Notes
+
+- Portainer has **full Docker access** via the socket mount
+- Protected by both Authelia and Portainer's own authentication
+- Use a strong, unique password for the Portainer admin account
+
+## Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| Can't connect to Docker | Verify socket mount in compose.yml |
+| Permission denied | Check socket permissions on host |
+| Lost admin password | Delete `data/` directory and reconfigure |

@@ -27,6 +27,19 @@ entryPoints:
   websecure:
     address: ":443"
 
+# Security headers middleware - apply to routes as needed
+http:
+  middlewares:
+    security-headers:
+      headers:
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        stsPreload: true
+        contentTypeNosniff: true
+        frameDeny: true
+        browserXssFilter: true
+        referrerPolicy: "strict-origin-when-cross-origin"
+
 # Definition der "Provider", die Traefik nach neuen Routen durchsucht
 providers:
   docker:
@@ -46,7 +59,7 @@ certificatesResolvers:
         provider: "cloudflare"
         # Eine kleine Verzögerung kann helfen, damit sich DNS-Änderungen verbreiten.
         # Dieser Wert ist optional, aber oft hilfreich.
-        delayBeforeCheck: 0
+        delayBeforeCheck: "0s"
       
       
       #httpChallenge:

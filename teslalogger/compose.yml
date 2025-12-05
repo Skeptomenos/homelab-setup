@@ -6,16 +6,18 @@
 #
 services:
   teslalogger:
-    image: bassmaster187/teslalogger:latest
+    image: bassmaster187/teslalogger:1.63.9.3
     container_name: teslalogger
     restart: always
+    security_opt:
+      - no-new-privileges:true
     volumes:
       - teslalogger-net8-tmp:/tmp/
       - teslalogger-net8-sqlschema:/etc/teslalogger/sqlschema
       - teslalogger-net8-grafanadashboards:/var/lib/grafana/dashboards/
       - teslalogger-net8-grafanaplugins:/var/lib/grafana/plugins/
-      - ${APPDATA_PATH:-.}/backup:/etc/teslalogger/backup
-      - ${APPDATA_PATH:-.}/invoices:/etc/teslalogger/Debug/net8.0/tesla_invoices
+      - ${APPDATA_PATH:-.}/backup:/etc/teslalogger/backup:Z
+      - ${APPDATA_PATH:-.}/invoices:/etc/teslalogger/Debug/net8.0/tesla_invoices:Z
       - teslalogger-net8-data:/etc/teslalogger/data
     depends_on:
       - teslalogger-database
@@ -25,7 +27,7 @@ services:
       - UMASK=${UMASK:-002}
       - TZ=${TZ:-Europe/Berlin}
     ports:
-      - ${TESLALOGGER_PORT:-5010}:5000
+      - "127.0.0.1:${TESLALOGGER_PORT:-5010}:5000"
     labels:
       - "diun.enable=true"
       - com.centurylinklabs.watchtower.enable=${WATCHTOWER_ENABLE:-true}
@@ -36,6 +38,8 @@ services:
     image: mariadb:10.4.7
     container_name: teslalogger-db
     restart: always
+    security_opt:
+      - no-new-privileges:true
     environment:
       - PUID=${PUID:-1000}
       - PGID=${PGID:-1000}
@@ -47,7 +51,7 @@ services:
       - MYSQL_ROOT_PASSWORD=${TESLALOGGER_DB_ROOT_PASSWORD}
     volumes:
       - teslalogger-net8-sqlschema:/docker-entrypoint-initdb.d
-      - ${APPDATA_PATH:-.}/mysql:/var/lib/mysql
+      - ${APPDATA_PATH:-.}/mysql:/var/lib/mysql:Z
     #ports:
     #  - 3306:3306      # No need to expose the DB to the public, communication is stack-internal
     #healthcheck:
@@ -63,17 +67,18 @@ services:
       
       
   teslalogger-grafana:
-    image: bassmaster187/teslalogger-grafana:latest
+    image: bassmaster187/teslalogger-grafana:1.63.9.3
     container_name: teslalogger-grafana
     restart: always
+    security_opt:
+      - no-new-privileges:true
     volumes: 
       - teslalogger-net8-grafanadashboards:/var/lib/grafana/dashboards/
       - teslalogger-net8-grafanaplugins:/var/lib/grafana/plugins/
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=${TESLALOGGER_GF_ADMIN_PASSWORD}
       - TZ=${TZ:-Europe/Berlin}
-    ports:
-      - ${GRAFANA_PORT:-3000}:3000
+    # Port removed - Grafana accessed via Traefik only
     depends_on:
       - teslalogger-database
     healthcheck:
@@ -98,17 +103,18 @@ services:
       - "traefik.http.routers.teslalogger-grafana.tls.certresolver=letsencrypt"
 
   teslalogger-webserver:
-    image: bassmaster187/teslalogger-webserver:latest
+    image: bassmaster187/teslalogger-webserver:1.63.9.3
     container_name: teslalogger-webserver
     restart: always
+    security_opt:
+      - no-new-privileges:true
     volumes:
       - teslalogger-net8-tmp:/tmp/
       #- ./www:/var/www/html
     depends_on:
       - teslalogger
       - teslalogger-grafana
-    ports:
-      - ${WEBSERVER_PORT:-8888}:80
+    # Port removed - Webserver accessed via Traefik only
     environment:
       - PUID=${PUID:-1000}
       - PGID=${PGID:-1000}

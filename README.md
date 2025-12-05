@@ -1,261 +1,316 @@
-# **Secure and Centralized Docker Homelab**
+# Homelab Setup
 
-This project implements a secure, robust, and centralized Docker environment for a personal homelab running on a Fedora-based server. The primary goal is to provide Single Sign-On (SSO) protected access to all services from both the local network and the internet, while maintaining a modular, easy-to-manage configuration.
+A secure, Docker-based homelab infrastructure running on Fedora with enterprise-grade security features.
 
-This document serves as the central manual for the architecture, initial setup, integration of new services, and troubleshooting.
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                        INTERNET                                     │
+└───────────────────────────┬─────────────────────────────────────────┘
+                            │
+                   ┌────────▼────────┐
+                   │   Cloudflare    │
+                   │     Tunnel      │
+                   └────────┬────────┘
+                            │ (no open ports)
+┌───────────────────────────▼─────────────────────────────────────────┐
+│  YOUR SERVER                                                        │
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────────────────┐  │
+│  │ cloudflared │───▶│   Traefik   │───▶│       Authelia          │  │
+│  │   (tunnel)  │    │   (proxy)   │    │   (SSO + 2FA)           │  │
+│  └─────────────┘    └──────┬──────┘    └─────────────────────────┘  │
+│                            │                                        │
+│         ┌──────────────────┼──────────────────┐                     │
+│         ▼                  ▼                  ▼                     │
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐              │
+│  │Home Assistant│   │    n8n      │    │  Pi-hole    │   ...        │
+│  │  Zigbee2MQTT│   │  Postgres   │    │             │              │
+│  │  InfluxDB   │   │             │    │             │              │
+│  └─────────────┘    └─────────────┘    └─────────────┘              │
+└─────────────────────────────────────────────────────────────────────┘
+```
 
-## **Table of Contents**
+## Features
 
-1. [Core Architectural Concepts](https://www.google.com/search?q=%231-core-architectural-concepts)  
-2. [Prerequisites](https://www.google.com/search?q=%232-prerequisites)  
-3. [Initial Setup](https://www.google.com/search?q=%233-initial-setup)  
-4. [Adding a New Service (Blueprint)](https://www.google.com/search?q=%234-adding-a-new-service-blueprint)  
-5. [Daily Management & Scripts](https://www.google.com/search?q=%235-daily-management--scripts)  
-6. [Troubleshooting](https://www.google.com/search?q=%236-troubleshooting)  
-7. [Project Structure](https://www.google.com/search?q=%237-project-structure)
+| Feature | Implementation |
+|---------|----------------|
+| **Zero-trust access** | Cloudflare Tunnel (no open router ports) |
+| **Reverse proxy** | Traefik v3.5 with automatic Let's Encrypt TLS |
+| **Single Sign-On** | Authelia with 2FA support |
+| **SELinux compatible** | All mounts use `:Z` flag for Fedora |
+| **Centralized config** | Single `.env` file for all secrets |
+| **Container monitoring** | Diun for image update notifications |
 
-### **1\. Core Architectural Concepts**
+## Services
 
-This setup is based on four fundamental principles to ensure stability, security, and maintainability:
+| Service | Purpose | Subdomain |
+|---------|---------|-----------|
+| **Traefik** | Reverse proxy & TLS | `traefik.` |
+| **Authelia** | SSO authentication | `auth.` |
+| **Home Assistant** | Smart home control | `home.` |
+| **Zigbee2MQTT** | Zigbee device bridge | `zigbee.` |
+| **n8n** | Workflow automation | `n8n.` |
+| **Pi-hole** | DNS & ad-blocking | `pihole.` |
+| **Portainer** | Container management | `portainer.` |
+| **TeslaLogger** | Vehicle data logging | `teslalogger.` |
+| **VS Code Server** | Browser-based IDE | `code.` |
+| **Portfolio Proxy** | API proxy service | `portfolio-api.` |
 
-* **Centralized Configuration (.env file):** All global variables such as domains, subdomains, user IDs, and secrets are defined in a single .env file in the project's root directory. This creates a "Single Source of Truth" and prevents redundant or conflicting configurations.  
-* **Consistent Permissions (PUID/PGID & SELinux):** File permission conflicts are avoided through two measures:  
-  1. All containers run under the same user ID (PUID) and group ID (PGID), which are defined in the .env file.  
-  2. On Fedora systems, the SELinux label :Z is used for all mounted volumes to grant containers write access by correctly relabeling the security context.  
-* **Automated Management (Scripts):** The start-all.sh and stop-all.sh scripts in the root directory allow for the management of the entire stack with a single command. They load the global .env file and apply the configuration to all services.  
-* **Layered Security (Traefik, Authelia, Cloudflare):**  
-  * **Cloudflared:** Establishes a secure tunnel to the internet without needing to open any ports on the router.  
-  * **Traefik:** Acts as a reverse proxy that receives all traffic, forwards requests to the correct services based on hostnames, and handles TLS encryption.  
-  * **Authelia:** Functions as a central authentication portal (SSO with 2FA) that is placed in front of every service to protect access.
+## Quick Start
 
-#### **The Security Trio in Detail: The Path of a Request**
+### Prerequisites
 
-Understanding the request flow is crucial to understanding the architecture.
+- Fedora-based server with Docker & Docker Compose v2
+- Cloudflare account with configured domain
+- Cloudflare Tunnel token
 
-**Request Flow from the Internet (e.g., https://code.your-domain.com)**
+### Installation
 
-1. **DNS & Tunnel Entry (Cloudflare):** Your request is directed to the Cloudflare Tunnel.  
-2. **Secure Ingress (cloudflared):** The cloudflared container on your server receives the request and forwards it to Traefik.  
-3. **Routing (Traefik):** Traefik inspects the host header and finds the matching router.  
-4. **Authentication Middleware (Traefik \-\> Authelia):** Traefik forwards the request to Authelia for verification.  
-5. **Authentication Check (Authelia):** Authelia checks your session cookie. If you are not authenticated, you are redirected to the login portal. Upon success, it gives the green light to Traefik.  
-6. **Final Forwarding (Traefik \-\> Service):** Traefik forwards the request to the target service (e.g., vscode-server).
+```bash
+# 1. Clone repository
+git clone <your-repo-url> /docker
+cd /docker
 
-**Request Flow from the Local Network (e.g., https://code.homelab.local)**
+# 2. Create environment file
+cp .env.example .env
+nano .env  # Fill in your values
 
-1. **DNS (/etc/hosts):** Your local machine resolves code.homelab.local to your Docker host's IP address.  
-2. **Routing (Traefik):** Your browser sends the request directly to Traefik.  
-3. **Authentication (Traefik \-\> Authelia \-\> Service):** From here, the flow is identical to steps 4, 5, and 6 from above.
+# 3. Create shared network
+docker network create proxy-netzwerk
 
-### **2\. Prerequisites**
+# 4. Set permissions
+sudo chown -R 1000:1000 .
+chmod +x start-all.sh stop-all.sh
 
-* A server with a Fedora-based operating system.  
-* Docker and Docker Compose (v2.x) are installed.  
-* A Cloudflare account and a configured domain.  
-* A Cloudflare Tunnel has been created and the token is available.  
-* Git for managing the configuration files.
+# 5. Start proxy stack first
+docker compose -f proxy/compose.yml up -d
 
-### **3\. Initial Setup**
+# 6. Start all other services
+./start-all.sh
+```
 
-1. **Clone the Repository:**  
-   git clone \<your-repo-url\> /docker/  
-   cd /docker/
+## Architecture
 
-2. Create the Global .env File:  
-   In the root directory (/docker), create a file named .env and customize the values. Be sure to add this file to your .gitignore\!  
-   \# /docker/.env
+### Request Flow
 
-   \# Global User and Permission Settings  
-   PUID=1000  
-   PGID=1000  
-   UMASK=002  
-   TZ=Europe/Berlin
+```
+Internet Request (https://app.yourdomain.com)
+    │
+    ▼
+┌─────────────────┐
+│ Cloudflare CDN  │  DDoS protection, DNS
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│   cloudflared   │  Secure tunnel (no open ports)
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│    Traefik      │  TLS termination, routing
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│    Authelia     │  Authentication check
+└────────┬────────┘
+         │ (authenticated)
+         ▼
+┌─────────────────┐
+│  Target Service │  Your application
+└─────────────────┘
+```
 
-   \# Domain Settings  
-   DOMAIN\_LOCAL=homelab.local  
-   DOMAIN\_PUBLIC=your-domain.com
+### Network Isolation
 
-   \# Subdomain Aliases  
-   SUBDOMAIN\_AUTHELIA=auth  
-   SUBDOMAIN\_TRAEFIK=traefik  
-   \# ... other subdomains ...
+| Network | Purpose | Services |
+|---------|---------|----------|
+| `proxy-netzwerk` | External access via Traefik | All public services |
+| `ha-intern` | Home automation internal | HA, Zigbee2MQTT, MQTT, InfluxDB |
 
-   \# Secrets & Passwords  
-   AUTHELIA\_JWT\_SECRET=YOUR\_VERY\_LONG\_AND\_RANDOM\_JWT\_SECRET  
-   CLOUDFLARE\_TUNNEL\_TOKEN=YOUR\_CLOUDFLARE\_TUNNEL\_TOKEN  
-   \# ... other secrets ...
+## Project Structure
 
-3. **Create the Shared Docker Network:**  
-   docker network create proxy-netzwerk
+```
+/docker/
+├── .env                    # Global secrets (gitignored)
+├── .gitignore
+├── start-all.sh            # Start all services (except proxy)
+├── stop-all.sh             # Stop all services (except proxy)
+│
+├── proxy/                  # Core infrastructure (manage separately)
+│   ├── compose.yml
+│   ├── authelia/
+│   │   └── config/
+│   └── traefik/
+│
+├── home-automation/        # Smart home stack
+│   ├── compose.yml
+│   └── mosquitto/
+│
+├── n8n/                    # Workflow automation
+│   └── compose.yml
+│
+├── pihole/                 # DNS & ad-blocking
+│   └── compose.yml
+│
+├── portainer/              # Container management
+│   └── compose.yml
+│
+├── teslalogger/            # Tesla data logging
+│   └── compose.yml
+│
+├── vscode-server/          # Browser IDE
+│   └── compose.yml
+│
+├── diun/                   # Image update notifications
+│   ├── compose.yml
+│   └── diun.yml
+│
+├── portfolio-proxy/        # API proxy service
+│   ├── compose.yml
+│   ├── Dockerfile
+│   └── main.py
+│
+└── docs/                   # Documentation & specs
+    └── plans/
+```
 
-4. **Set File Permissions:**  
-   sudo chown \-R 1000:1000 .
+## Daily Management
 
-5. **Make Scripts Executable:**  
-   chmod \+x start-all.sh  
-   chmod \+x stop-all.sh
+### Scripts
 
-6. **Start the Entire Stack for the First Time:**  
-   ./start-all.sh
+The management scripts protect critical infrastructure by skipping the `proxy/` directory:
 
-### **4\. Adding a New Service (Blueprint)**
+```bash
+# Start all services (except proxy stack)
+./start-all.sh
 
-Follow these steps to seamlessly integrate a new service (e.g., fileserver).
+# Stop all services (except proxy stack)
+./stop-all.sh
 
-1. Create Directory and compose.yml:  
-   Create a new directory (e.g., /docker/fileserver) and a compose.yml file inside it. Use the following template, which employs the best-practice pattern with two routers.  
-   \# /docker/fileserver/compose.yml  
-   services:  
-     fileserver:  
-       image: some/fileserver-image:latest  
-       container\_name: fileserver  
-       restart: unless-stopped  
-       environment:  
-         \- PUID=${PUID}  
-         \- PGID=${PGID}  
-         \- TZ=${TZ}  
-       volumes:  
-         \- ./config:/config:Z  
-         \- /path/to/your/data:/data:Z  
-       networks:  
-         \- proxy-netzwerk  
-       labels:  
-         \- "traefik.enable=true"
+# Start specific service(s)
+./start-all.sh n8n pihole
 
-         \# \--- Router for public, secure access \---  
-         \- "traefik.http.routers.fileserver-secure.rule=Host(\`${SUBDOMAIN\_FILESERVER}.${DOMAIN\_PUBLIC}\`)"  
-         \- "traefik.http.routers.fileserver-secure.entrypoints=websecure"  
-         \- "traefik.http.routers.fileserver-secure.tls=true"  
-         \- "traefik.http.routers.fileserver-secure.tls.certresolver=letsencrypt"  
-         \- "traefik.http.routers.fileserver-secure.middlewares=authelia@docker"  
-         \- "traefik.http.routers.fileserver-secure.service=fileserver-service"
+# Manage proxy stack separately
+docker compose -f proxy/compose.yml up -d
+docker compose -f proxy/compose.yml down
+```
 
-         \# \--- Router for local access \---  
-         \- "traefik.http.routers.fileserver-local.rule=Host(\`${SUBDOMAIN\_FILESERVER}.${DOMAIN\_LOCAL}\`)"  
-         \- "traefik.http.routers.fileserver-local.entrypoints=http" \# Or 'websecure' if you have a local TLS certificate  
-         \- "traefik.http.routers.fileserver-local.service=fileserver-service"
+### Common Commands
 
-         \# \--- Service Definition (used by both routers) \---  
-         \- "traefik.http.services.fileserver-service.loadbalancer.server.port=8080" \# \<-- Adjust the internal port of the service\!
+```bash
+# View logs
+docker compose -f <service>/compose.yml logs -f
 
-   networks:  
-     proxy-netzwerk:  
+# Restart single service
+docker compose -f <service>/compose.yml restart
+
+# Update service image
+docker compose -f <service>/compose.yml pull
+docker compose -f <service>/compose.yml up -d
+
+# Check all container status
+docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+```
+
+## Adding a New Service
+
+1. **Create service directory:**
+   ```bash
+   mkdir my-service
+   ```
+
+2. **Create compose.yml:**
+   ```yaml
+   services:
+     my-service:
+       image: some/image:version
+       container_name: my-service
+       restart: unless-stopped
+       security_opt:
+         - no-new-privileges:true
+       environment:
+         - PUID=${PUID}
+         - PGID=${PGID}
+         - TZ=${TZ}
+       volumes:
+         - ./config:/config:Z
+       networks:
+         - proxy-netzwerk
+       labels:
+         - "diun.enable=true"
+         - "traefik.enable=true"
+         - "traefik.http.routers.my-service.rule=Host(`${SUBDOMAIN_MYSERVICE}.${DOMAIN_PUBLIC}`)"
+         - "traefik.http.routers.my-service.entrypoints=websecure"
+         - "traefik.http.routers.my-service.tls=true"
+         - "traefik.http.routers.my-service.tls.certresolver=letsencrypt"
+         - "traefik.http.routers.my-service.middlewares=authelia@docker"
+         - "traefik.http.services.my-service.loadbalancer.server.port=8080"
+
+   networks:
+     proxy-netzwerk:
        external: true
+   ```
 
-2. Define Subdomain in .env:  
-   Open /docker/.env and add: SUBDOMAIN\_FILESERVER=files  
-3. Configure Access in Authelia:  
-   Open /docker/proxy/authelia/config/configuration.yml and add a new rule.  
-4. Add Local DNS Entry:  
-   Edit the hosts file on your client computer and add 192.168.1.10 files.homelab.local (replace the IP).  
-5. Restart Services:  
-   Run ./start-all.sh.
+3. **Add to `.env`:**
+   ```bash
+   SUBDOMAIN_MYSERVICE=myapp
+   ```
 
-### **5\. Daily Management & Scripts**
+4. **Add Authelia rule** (if needed) in `proxy/authelia/config/configuration.yml`
 
-The management scripts simplify the operation of the entire stack.
+5. **Start:**
+   ```bash
+   ./start-all.sh my-service
+   ```
 
-**start-all.sh**
+## Environment Variables
 
-\#\!/usr/bin/env zsh  
-\# This script starts all Docker Compose services in the homelab-setup directory.
+Required variables in `.env`:
 
-\# Find the script's root directory to make it runnable from anywhere.  
-SCRIPT\_DIR=$(dirname "$0")  
-cd "$SCRIPT\_DIR" || exit
+```bash
+# User/Group IDs
+PUID=1000
+PGID=1000
+TZ=Europe/Berlin
 
-\# Define the path to the global .env file  
-ENV\_FILE\_PATH="$(pwd)/.env"
+# Domains
+DOMAIN_LOCAL=homelab.local
+DOMAIN_PUBLIC=yourdomain.com
 
-\# Check if the .env file exists  
-if \[ \! \-f "$ENV\_FILE\_PATH" \]; then  
-    echo "🚨 ERROR: Global .env file not found at $ENV\_FILE\_PATH."  
-    echo "Please create the .env file from the template and fill it out."  
-    exit 1  
-fi
+# Subdomains
+SUBDOMAIN_AUTHELIA=auth
+SUBDOMAIN_TRAEFIK=traefik
+SUBDOMAIN_HOMEASSISTANT=home
+# ... add more as needed
 
-echo "🚀 Starting all Docker Compose services in homelab-setup..."  
-echo "    (Using environment file: $ENV\_FILE\_PATH)"
+# Secrets (generate with: openssl rand -base64 32)
+AUTHELIA_JWT_SECRET=
+AUTHELIA_SESSION_SECRET=
+AUTHELIA_STORAGE_ENCRYPTION_KEY=
+CLOUDFLARE_TUNNEL_TOKEN=
+CLOUDFLARE_DNS_API_TOKEN=
+```
 
-\# Find all compose.yml files ONLY in the direct subdirectories.  
-\# Stacks like 'home-automation' load their own sub-files via 'include'.  
-for compose\_file in \*/compose.yml; do  
-    \# Extract the directory from the path  
-    dir=$(dirname "${compose\_file}")
+## Troubleshooting
 
-    echo "\\n--- Found compose file in '$dir'. Starting up... \---"  
-    \# Execute docker compose up, explicitly passing the .env file  
-    (cd "$dir" && docker compose \--env-file "$ENV\_FILE\_PATH" up \-d \--force-recreate)  
-done
+| Issue | Solution |
+|-------|----------|
+| **Permission Denied** | Run `sudo chown -R 1000:1000 .` and ensure volumes have `:Z` flag |
+| **404 Not Found** | Check Traefik labels for typos, clear browser cache |
+| **502 Bad Gateway** | Verify service is running, on `proxy-netzwerk`, and port label is correct |
+| **Port 53 in use** | Disable systemd-resolved: `sudo systemctl disable --now systemd-resolved` |
+| **SELinux denials** | Check all volume mounts have `:Z` suffix |
+| **Container won't start** | Check logs: `docker compose -f <service>/compose.yml logs` |
 
-echo "\\n✅ All services have been started."
+## Security Notes
 
-**stop-all.sh**
+- All public routes require Authelia authentication (except explicitly bypassed)
+- Secrets stored only in `.env` file (gitignored)
+- All containers run with `no-new-privileges:true`
+- SELinux enforced with proper context labels
+- No ports exposed directly to internet (Cloudflare Tunnel)
 
-\#\!/usr/bin/env zsh  
-\# This script stops all Docker Compose services in the homelab-setup directory.
+## License
 
-\# Find the script's root directory to make it runnable from anywhere.  
-SCRIPT\_DIR=$(dirname "$0")  
-cd "$SCRIPT\_DIR" || exit
-
-\# Define the path to the global .env file  
-ENV\_FILE\_PATH="$(pwd)/.env"
-
-\# Check if the .env file exists. It's only a warning on shutdown.  
-if \[ \! \-f "$ENV\_FILE\_PATH" \]; then  
-    echo "⚠️ WARNING: Global .env file not found at $ENV\_FILE\_PATH."  
-    echo "    Shutdown might fail if variables are needed for network names, etc."  
-fi
-
-echo "🛑 Shutting down all Docker Compose services in homelab-setup..."
-
-\# Find all compose.yml files in direct and second-level subdirectories.  
-\# The (N) is a Zsh "glob qualifier" that prevents the script from failing  
-\# if one of the search patterns doesn't find any files.  
-for compose\_file in \*/compose.yml(N) \*/\*/compose.yml(N); do  
-    \# Extract the directory from the path  
-    dir=$(dirname "${compose\_file}")
-
-    echo "\\n--- Found compose file in '$dir'. Shutting down... \---"  
-    \# Execute docker compose down, explicitly passing the .env file  
-    (cd "$dir" && docker compose \--env-file "$ENV\_FILE\_PATH" down)  
-    echo "--- Services in '$dir' stopped successfully. \---"  
-done
-
-echo "\\n✅ All services have been shut down."
-
-### **6\. Troubleshooting**
-
-* **Error: "Permission Denied"**: Stop services (./stop-all.sh), run sudo chown \-R 1000:1000 . in the root directory, and ensure all volumes have the :Z label.  
-* **Error: 404 Not Found**: Check the rule labels in the compose.yml for typos and clear your browser cache.  
-* **Error: 502 Bad Gateway**: Ensure the target service is running, connected to proxy-netzwerk, and the loadbalancer.server.port label is correct.  
-* **Error: "address already in use" for Port 53 (Pi-hole)**: Disable systemd-resolved on the host: sudo systemctl stop systemd-resolved and sudo systemctl disable systemd-resolved.
-
-### **7\. Project Structure**
-
-The project is structured modularly to ensure a clear separation of concerns.
-
-/docker/  
-├── .env                  \# Global configuration and secrets  
-├── .gitignore  
-├── README.md             \# This document  
-├── start-all.sh          \# Script to start all services  
-├── stop-all.sh           \# Script to stop all services  
-├── home-automation/      \# Stack for Smart Home  
-│   └── compose.yml  
-├── n8n/  
-│   └── compose.yml  
-├── pihole/  
-│   └── compose.yml  
-├── portainer/  
-│   └── compose.yml  
-├── proxy/                \# Consolidated Ingress Stack  
-│   ├── compose.yml  
-│   ├── authelia/  
-│   ├── cloudflared/  
-│   └── traefik/  
-├── teslalogger/  
-│   └── compose.yml  
-└── vscode-server/  
-    └── compose.yml  
+Private homelab configuration - not for redistribution.

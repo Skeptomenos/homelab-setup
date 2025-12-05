@@ -6,6 +6,8 @@ services:
     image: postgres:15
     container_name: postgres
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     labels:
       - "diun.enable=true"
     environment:
@@ -17,15 +19,17 @@ services:
     networks:
       - ha-intern
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready", "-d", "db_prod"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
 
   n8n:
-    image: docker.n8n.io/n8nio/n8n:1.115.3-arm64
+    image: docker.n8n.io/n8nio/n8n:1.122.5
     container_name: n8n
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     env_file:
       - ../.env
     environment:
@@ -43,7 +47,7 @@ services:
       - N8N_JWT_SECRET=${N8N_JWT_SECRET}
       # --- END STABLE AUTH ---
       - N8N_RUNNERS_ENABLED=true
-      - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
+      - N8N_BLOCK_ENV_ACCESS_IN_NODE=true
       - DB_TYPE=postgresdb
       - DB_POSTGRESDB_HOST=postgres
       - DB_POSTGRESDB_PORT=5432
@@ -52,7 +56,7 @@ services:
       - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
     volumes:
       # Persistenter Speicher für n8n-Daten (Workflows, Credentials, etc.)
-      - ./n8n-data:/home/node/.n8n
+      - ./n8n-data:/home/node/.n8n:Z
     networks:
       - proxy-netzwerk
       - ha-intern

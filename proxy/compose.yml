@@ -3,6 +3,8 @@ services:
     image: authelia/authelia:4.39.10
     container_name: authelia
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     volumes:
       - ./authelia/config:/config:Z
     env_file:
@@ -57,7 +59,7 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro,Z
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./traefik/data:/data:Z
     labels:

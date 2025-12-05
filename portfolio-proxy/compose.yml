@@ -1,0 +1,39 @@
+# /docker/portfolio-proxy/compose.yml
+# API proxy for Portfolio Prism Docker distribution.
+# Securely proxies Finnhub and GitHub API calls.
+
+services:
+  portfolio-proxy:
+    build: .
+    container_name: portfolio-proxy
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      - TZ=${TZ:-Europe/Berlin}
+      - FINNHUB_API_KEY=${FINNHUB_API_KEY}
+      - GITHUB_ISSUES_TOKEN=${GITHUB_ISSUES_TOKEN}
+      - PROXY_API_KEY=${PROXY_API_KEY}
+      - GITHUB_OWNER=${GITHUB_OWNER:-Skeptomenos}
+      - GITHUB_REPO=${GITHUB_REPO:-Portfolio-Prism}
+    networks:
+      - proxy-netzwerk
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    labels:
+      - "diun.enable=true"
+      - "traefik.enable=true"
+      # Public route (no Authelia - clients authenticate with X-API-Key)
+      - "traefik.http.routers.portfolio-proxy.rule=Host(`${SUBDOMAIN_PORTFOLIO_API:-portfolio-api}.${DOMAIN_PUBLIC}`)"
+      - "traefik.http.routers.portfolio-proxy.entrypoints=websecure"
+      - "traefik.http.routers.portfolio-proxy.tls=true"
+      - "traefik.http.routers.portfolio-proxy.tls.certresolver=letsencrypt"
+      - "traefik.http.services.portfolio-proxy.loadbalancer.server.port=8080"
+
+networks:
+  proxy-netzwerk:
+    external: true

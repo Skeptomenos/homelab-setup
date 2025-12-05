@@ -55,9 +55,10 @@ authentication_backend:
     path: /config/users.yaml
     password:
       algorithm: argon2id
-      iterations: 1
+      iterations: 3
       salt_length: 16
       key_length: 32
-      memory: 1024
+      memory: 65536
+      parallelism: 4
 
 

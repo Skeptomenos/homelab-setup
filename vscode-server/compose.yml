@@ -1,6 +1,6 @@
 services:
   code-server:
-    image: linuxserver/code-server:latest
+    image: linuxserver/code-server:4.106.3-ls307
     container_name: code-server
     restart: unless-stopped
     security_opt:

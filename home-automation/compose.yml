@@ -20,10 +20,11 @@ services:
 
   # Zigbee2MQTT stellt die Verbindung zu Ihren Zigbee-Geräten her und benötigt Mosquitto.
   zigbee2mqtt:
-    image: "ghcr.io/koenkk/zigbee2mqtt:latest"
+    image: "ghcr.io/koenkk/zigbee2mqtt:2.7.0"
     container_name: zigbee2mqtt
     restart: unless-stopped
-    #privileged: true
+    security_opt:
+      - no-new-privileges:true
     environment:
       - TZ=${TZ}
     #ports:
@@ -55,8 +56,9 @@ services:
     image: "influxdb:2.7"
     container_name: influxdb
     restart: unless-stopped
-    ports:
-      - "8086:8086"
+    security_opt:
+      - no-new-privileges:true
+    # Port removed - InfluxDB only accessed internally via ha-intern network
     labels:
       - "diun.enable=true"
     environment:
@@ -77,12 +79,14 @@ services:
 
   # Home Assistant ist die zentrale Steuerungssoftware.
   homeassistant:
-    image: "homeassistant/home-assistant:stable"
+    image: "homeassistant/home-assistant:2025.12.0"
     container_name: homeassistant
     restart: unless-stopped
-    command: ["python", "-m", "homeassistant", "--config", "/config"]
+    security_opt:
+      - no-new-privileges:true
+    # Port bound to localhost only - public access via Traefik
     ports:
-      - "8123:8123"
+      - "127.0.0.1:8123:8123"
     environment:
       - TZ=${TZ}
     volumes:
